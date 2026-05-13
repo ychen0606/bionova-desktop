@@ -33,6 +33,18 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Python for ipykernel e2e
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ipykernel
+        run: pip install ipykernel
+
+      - name: Export BIONOVA_E2E_PYTHON
+        shell: bash
+        run: echo "BIONOVA_E2E_PYTHON=$(python -c 'import sys;print(sys.executable)')" >> $GITHUB_ENV
+
       - name: Rust unit tests
         working-directory: src-tauri
         run: cargo test --locked --verbose
