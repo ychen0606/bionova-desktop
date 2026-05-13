@@ -91,8 +91,11 @@ impl LocalKernel {
         iopub.set_subscribe(b"")?;
         iopub.connect(&format!("tcp://127.0.0.1:{iopub_port}"))?;
 
-        // Brief settle for kernel readiness.
-        thread::sleep(Duration::from_millis(300));
+        // Settle for kernel readiness + ZMQ SUB slow-joiner propagation.
+        // 2s is required on cold CI Windows runners; 300ms can miss first iopub
+        // messages on a freshly-bound PUB socket due to the well-known PUB/SUB
+        // slow-joiner pattern.
+        thread::sleep(Duration::from_secs(2));
 
         let (tx, rx) = channel::<KernelEvent>();
 
@@ -302,7 +305,7 @@ mod tests {
         let (mut k, rx) = LocalKernel::spawn(&py).unwrap();
         k.execute("print('hello from bionova')").unwrap();
         let mut saw_stream = false;
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             if let Ok(ev) = rx.recv_timeout(Duration::from_millis(200)) {
                 if let KernelEvent::Stream { text, .. } = ev {
