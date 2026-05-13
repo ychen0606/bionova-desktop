@@ -1,6 +1,10 @@
 # BioNova Desktop
 
-AI-driven scRNA-seq IDE for Windows. **Plan 2 of 5 — IDE Shell.**
+AI-driven scRNA-seq IDE for Windows. **Plan 2.5 of 5 — Data Folder + Inspector + UI Rename.**
+
+> Terminology note: BioNova "Step" = one Jupyter-style code block. The biological
+> cells in scRNA-seq live inside the `adata` AnnData object loaded by your steps,
+> NOT in the UI's "Step" entities.
 
 This release lays the foundation: onboarding wizard, configuration persistence,
 typed Tauri ↔ React IPC, and a smoke test that proves the app can spawn a Python

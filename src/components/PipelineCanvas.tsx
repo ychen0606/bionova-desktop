@@ -1,10 +1,10 @@
 import { Card } from "./Card";
 import { NotebookJson } from "../lib/ipc";
-import { CellState } from "./Cell";
+import { StepState } from "./Step";
 
 interface Props {
   notebook: NotebookJson;
-  cellStates: Record<string, CellState>;
+  cellStates: Record<string, StepState>;
   onAddCard: () => void;
   onRenameCard: (card_id: string, title: string) => void;
   onDeleteCard: (card_id: string) => void;

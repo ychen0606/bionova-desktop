@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Card } from "./Card";
 
-vi.mock("./Cell", () => ({
-  Cell: ({ cell }: any) => <div data-testid="mock-cell">{cell.source}</div>,
+vi.mock("./Step", () => ({
+  Step: ({ cell }: any) => <div data-testid="mock-step">{cell.source}</div>,
 }));
 
 const mkCard = () => ({
@@ -36,13 +36,13 @@ describe("Card", () => {
     expect(screen.getByTestId("card-title-edit")).toBeInTheDocument();
   });
 
-  it("toggle collapses cells", () => {
+  it("toggle collapses steps", () => {
     render(<Card card={mkCard()} cells={[]} cellStates={{}} {...baseHandlers} />);
     fireEvent.click(screen.getByTestId("card-toggle"));
     expect(screen.queryByTestId("card-add-cell")).not.toBeInTheDocument();
   });
 
-  it("Add cell triggers callback", () => {
+  it("Add step triggers callback", () => {
     const onAddCell = vi.fn();
     render(
       <Card

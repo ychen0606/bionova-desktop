@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod config;
+pub mod data_inspector;
 pub mod kernel;
 pub mod keychain;
 pub mod notebook;
@@ -7,6 +8,14 @@ pub mod op_log;
 pub mod project;
 pub mod providers;
 pub mod python_probe;
+
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    use std::sync::Mutex;
+    /// Shared lock for tests that mutate `$HOME`. Tests across modules race
+    /// otherwise and clobber each other's tempdirs.
+    pub static HOME_GUARD: Mutex<()> = Mutex::new(());
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -29,6 +38,8 @@ pub fn run() {
             commands::op_log_append,
             commands::op_log_set_head,
             commands::op_log_read,
+            commands::data_list,
+            commands::data_inspect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

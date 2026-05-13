@@ -4,6 +4,10 @@ import { ProjectEditor } from "./ProjectEditor";
 
 vi.mock("../lib/ipc", () => ({
   ipc: { getConfig: vi.fn(async () => ({ python_env: { python_path: "x" } })) },
+  ipcData: {
+    list: vi.fn(async () => []),
+    inspect: vi.fn(async () => ({ report: {} })),
+  },
   ipcProject: {
     open: vi.fn(async () => ({
       slug: "p",
@@ -42,6 +46,10 @@ vi.mock("../lib/ipc", () => ({
 
 vi.mock("./PipelineCanvas", () => ({
   PipelineCanvas: () => <div data-testid="canvas">canvas</div>,
+}));
+
+vi.mock("./DataPanel", () => ({
+  DataPanel: () => <div data-testid="data-panel-mock">data-panel</div>,
 }));
 
 describe("ProjectEditor", () => {

@@ -7,6 +7,7 @@ use crate::providers::{
 };
 use crate::python_probe::{self, PythonCandidate};
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -126,4 +127,32 @@ pub async fn op_log_set_head(slug: String, head: u64) -> Result<(), String> {
 #[tauri::command]
 pub async fn op_log_read(slug: String) -> Result<Vec<serde_json::Value>, String> {
     op_log::read_log(&slug).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn data_list(slug: String) -> Result<Vec<crate::data_inspector::DataFile>, String> {
+    let dir = crate::data_inspector::project_data_dir(&slug).map_err(|e| e.to_string())?;
+    crate::data_inspector::list_files(&dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn data_inspect(
+    app: tauri::AppHandle,
+    slug: String,
+    filename: String,
+) -> Result<crate::data_inspector::InspectionReport, String> {
+    let cfg = crate::config::read(&crate::config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let python_path = cfg
+        .python_env
+        .ok_or("python_env not configured")?
+        .python_path;
+    let data_dir = crate::data_inspector::project_data_dir(&slug).map_err(|e| e.to_string())?;
+    let file_path = data_dir.join(&filename);
+    let script_path = app
+        .path()
+        .resolve("resources/scripts/inspect_data.py", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| e.to_string())?;
+    crate::data_inspector::inspect_one(&python_path, &script_path, &file_path)
+        .map_err(|e| e.to_string())
 }

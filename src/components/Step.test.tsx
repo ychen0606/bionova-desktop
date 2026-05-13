@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { Cell } from "./Cell";
+import { Step } from "./Step";
 
 vi.mock("./MonacoCellEditor", () => ({
   MonacoCellEditor: ({ value }: any) => (
@@ -16,12 +16,13 @@ const mkCell = (src = "print(1)") => ({
   metadata: { bionova: { card_id: "c1" }, bionova_cell_id: "u1" } as any,
 });
 
-describe("Cell", () => {
-  it("renders source", () => {
+describe("Step", () => {
+  it("renders source and step label", () => {
     render(
-      <Cell
+      <Step
         cell={mkCell("x=1")}
         state="idle"
+        index={3}
         onSourceChange={() => {}}
         onRun={() => {}}
         onClear={() => {}}
@@ -29,35 +30,38 @@ describe("Cell", () => {
       />
     );
     expect(screen.getByTestId("mock-editor")).toHaveTextContent("x=1");
+    expect(screen.getByText(/Step 3/)).toBeInTheDocument();
   });
 
   it("Run button triggers callback", () => {
     const onRun = vi.fn();
     render(
-      <Cell
+      <Step
         cell={mkCell()}
         state="idle"
+        index={1}
         onSourceChange={() => {}}
         onRun={onRun}
         onClear={() => {}}
         onDelete={() => {}}
       />
     );
-    fireEvent.click(screen.getByTestId("cell-run"));
+    fireEvent.click(screen.getByTestId("step-run"));
     expect(onRun).toHaveBeenCalled();
   });
 
   it("disables Run while running", () => {
     render(
-      <Cell
+      <Step
         cell={mkCell()}
         state="running"
+        index={1}
         onSourceChange={() => {}}
         onRun={() => {}}
         onClear={() => {}}
         onDelete={() => {}}
       />
     );
-    expect(screen.getByTestId("cell-run")).toBeDisabled();
+    expect(screen.getByTestId("step-run")).toBeDisabled();
   });
 });

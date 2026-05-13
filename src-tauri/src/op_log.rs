@@ -102,8 +102,9 @@ mod tests {
     use serde_json::json;
 
     fn with_temp_home<F: FnOnce()>(f: F) {
-        static GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _lock = GUARD.lock().unwrap();
+        let _lock = crate::test_helpers::HOME_GUARD
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let dir = tempfile::TempDir::new().unwrap();
         let prev = std::env::var_os("HOME");
         std::env::set_var("HOME", dir.path());

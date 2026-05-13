@@ -16,7 +16,8 @@ import {
 } from "../lib/opLog";
 import { PipelineCanvas } from "./PipelineCanvas";
 import { UndoRedoBar } from "./UndoRedoBar";
-import { CellState } from "./Cell";
+import { DataPanel } from "./DataPanel";
+import { StepState } from "./Step";
 
 interface Props {
   slug: string;
@@ -28,7 +29,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
   const [nb, setNb] = useState<NotebookJson | null>(null);
   const [log, setLog] = useState<OpEntry[]>([]);
   const [head, setHead] = useState<number>(0);
-  const [cellStates, setCellStates] = useState<Record<string, CellState>>({});
+  const [cellStates, setCellStates] = useState<Record<string, StepState>>({});
   const [lastOp, setLastOp] = useState<string>("");
   const saveTimer = useRef<number | null>(null);
 
@@ -241,6 +242,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         onBack={onBack}
         projectName={projectName}
       />
+      <DataPanel slug={slug} />
       <PipelineCanvas
         notebook={nb}
         cellStates={cellStates}

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { CardMeta, CellJson } from "../lib/ipc";
-import { Cell, CellState } from "./Cell";
+import { Step, StepState } from "./Step";
 import { getCellId } from "../lib/opLog";
 
 interface Props {
   card: CardMeta;
   cells: CellJson[];
-  cellStates: Record<string, CellState>;
+  cellStates: Record<string, StepState>;
   onRenameCard: (newTitle: string) => void;
   onDeleteCard: () => void;
   onAddCell: () => void;
@@ -21,7 +21,7 @@ export function Card(p: Props) {
   const [title, setTitle] = useState(p.card.title);
   const [collapsed, setCollapsed] = useState(p.card.collapsed);
 
-  const cardState: CellState = p.cells.some((c) =>
+  const cardState: StepState = p.cells.some((c) =>
     ["running", "queued"].includes(p.cellStates[getCellId(c)] ?? "idle")
   )
     ? "running"
@@ -31,14 +31,14 @@ export function Card(p: Props) {
         ? "done"
         : "idle";
 
-  const stateBadge: Record<CellState, string> = {
+  const stateBadge: Record<StepState, string> = {
     idle: "—",
     queued: "queued",
     running: "⏳",
     done: "✓",
     error: "✗",
   };
-  const stateColor: Record<CellState, string> = {
+  const stateColor: Record<StepState, string> = {
     idle: "text-slate-400",
     queued: "text-amber-600",
     running: "text-amber-600",
@@ -99,12 +99,13 @@ export function Card(p: Props) {
       </div>
       {!collapsed && (
         <div className="p-3">
-          {p.cells.map((cell) => {
+          {p.cells.map((cell, idx) => {
             const id = getCellId(cell);
             return (
-              <Cell
+              <Step
                 key={id}
                 cell={cell}
+                index={idx + 1}
                 state={p.cellStates[id] ?? "idle"}
                 onSourceChange={(s) => p.onCellSourceChange(id, s)}
                 onRun={() => p.onCellRun(id)}
@@ -118,7 +119,7 @@ export function Card(p: Props) {
             className="text-xs px-2 py-1 bg-slate-100 rounded mt-2"
             data-testid="card-add-cell"
           >
-            + Add cell
+            + Add step
           </button>
         </div>
       )}

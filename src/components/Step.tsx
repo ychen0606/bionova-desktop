@@ -3,34 +3,36 @@ import { Outputs } from "./Outputs";
 import { CellJson } from "../lib/ipc";
 import { getCellId } from "../lib/opLog";
 
-export type CellState = "idle" | "queued" | "running" | "done" | "error";
+export type StepState = "idle" | "queued" | "running" | "done" | "error";
 
 interface Props {
-  cell: CellJson;
-  state: CellState;
+  cell: CellJson; // .ipynb-format code cell; UI label is "Step"
+  state: StepState;
+  index: number; // 1-based label within its card
   onSourceChange: (newSrc: string) => void;
   onRun: () => void;
   onClear: () => void;
   onDelete: () => void;
 }
 
-export function Cell({
+export function Step({
   cell,
   state,
+  index,
   onSourceChange,
   onRun,
   onClear,
   onDelete,
 }: Props) {
   const src = Array.isArray(cell.source) ? cell.source.join("") : cell.source;
-  const stateBadge: Record<CellState, string> = {
+  const stateBadge: Record<StepState, string> = {
     idle: "—",
     queued: "queued",
     running: "running…",
     done: `done${cell.execution_count != null ? ` [${cell.execution_count}]` : ""}`,
     error: "error",
   };
-  const stateColor: Record<CellState, string> = {
+  const stateColor: Record<StepState, string> = {
     idle: "text-slate-400",
     queued: "text-amber-600",
     running: "text-amber-600",
@@ -39,13 +41,14 @@ export function Cell({
   };
 
   return (
-    <div className="my-2" data-testid={`cell-${getCellId(cell)}`}>
+    <div className="my-2" data-testid={`step-${getCellId(cell)}`}>
       <div className="flex items-center gap-2 mb-1 text-xs">
+        <span className="font-mono text-slate-500 w-12">Step {index}</span>
         <button
           onClick={onRun}
           disabled={state === "running" || state === "queued"}
           className="px-2 py-0.5 bg-blue-600 text-white rounded disabled:opacity-50"
-          data-testid="cell-run"
+          data-testid="step-run"
         >
           Run
         </button>

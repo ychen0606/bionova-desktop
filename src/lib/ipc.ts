@@ -119,6 +119,23 @@ export const ipc = {
     invoke<string>("run_smoke_cell", { pythonPath, code }),
 };
 
+export interface DataFile {
+  name: string;
+  size_bytes: number;
+  modified_unix_secs: number;
+  kind_hint: string;
+}
+
+export interface InspectionReport {
+  report: any; // free-form JSON from inspect_data.py
+}
+
+export const ipcData = {
+  list: (slug: string) => invoke<DataFile[]>("data_list", { slug }),
+  inspect: (slug: string, filename: string) =>
+    invoke<InspectionReport>("data_inspect", { slug, filename }),
+};
+
 export const ipcProject = {
   list: () => invoke<ProjectSummary[]>("project_list"),
   create: (display_name: string) =>
