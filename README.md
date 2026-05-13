@@ -1,6 +1,6 @@
 # BioNova Desktop
 
-AI-driven scRNA-seq IDE for Windows. **Plan 1 of 5 — Foundation + Local Cell Execution.**
+AI-driven scRNA-seq IDE for Windows. **Plan 2 of 5 — IDE Shell.**
 
 This release lays the foundation: onboarding wizard, configuration persistence,
 typed Tauri ↔ React IPC, and a smoke test that proves the app can spawn a Python
@@ -42,27 +42,35 @@ The installer lands at
 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/BioNova_0.1.0_x64_en-US.msi`.
 Double-click to install. The app appears in the Start menu as "BioNova".
 
-## What works in this build (v0.1.0-plan1)
+## What works in this build (v0.2.0-plan2)
 
+**New in Plan 2:**
+- Real project CRUD with on-disk `~/BioNova/projects/<slug>/` layout
+  (notebook.ipynb + config.json + history.jsonl + artifacts/)
+- Multi-cell projects organized as **cards** (collapsible groups of cells)
+- Monaco editor with Python syntax highlighting + `Ctrl+Enter` to run
+- Cell output rendering: stdout, stderr, image/png, error tracebacks
+- Project-level undo/redo (`Ctrl+Alt+Z` / `Ctrl+Alt+Y`) — persistent across sessions
+- Atomic notebook writes with `.bak` recovery
+- Moved deleted projects to `~/BioNova/.trash/` (30-day grace)
+
+**Carried over from Plan 1:**
 - First-launch onboarding wizard (AI provider → Python env → optional HPC)
-- Settings pane that displays the current config and lets you re-run the wizard
-- ProjectShell stub with Settings + Smoke-test entry points
-- Smoke-test page that executes a Python cell through an `ipykernel`
-  subprocess and displays stdout
-- Two AI provider adapters: Anthropic Messages API and OpenAI-compatible
-  Chat Completions, each with a `ping()` credential-validation call
-- Secret storage in OS Credential Manager (Windows) via the `keyring` crate
-- Windows Python detection covering Anaconda3, Miniconda3, Microsoft Store
-  Python, and PATH fallback
-- `.github/workflows/ci.yml` running `cargo test`, `pnpm test`, and a smoke
-  MSI build on `windows-2022` for every push to `main`
+- Settings pane with re-run wizard
+- Two AI provider adapters (Anthropic + OpenAI-compatible, ping/validate)
+- Windows Credential Manager via `keyring` crate
+- Windows Python detection (Anaconda/Miniconda/Store/PATH)
+- ipykernel ZMQ bridge for local execution
+- `.github/workflows/ci.yml` cargo test + vitest + MSI build on `windows-2022`
 
 ## What is **not** yet implemented
 
-- Pipeline cards UI, multi-cell projects, `.ipynb` persistence (Plan 2)
 - AI engine integration (plan / generate / fix / interpret prompts) (Plan 3)
 - HPC execution via SSH + Slurm (Plan 4)
-- Undo/redo, AI Output Regression Suite, signed MSI release (Plan 5)
+- AI Output Regression Suite, signed MSI release (Plan 5)
+- Variable inspector panel (Plan 5)
+- Drag-to-reorder cards/cells (Plan 3)
+- Op log compaction (Plan 5)
 
 See `docs/superpowers/specs/2026-05-13-bionova-desktop-design.md` (in the
 parent BioNova repo) for the full product spec and roadmap.
