@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 pub mod anthropic;
+pub mod openai_compat;
 
 #[async_trait]
 pub trait LLMProvider: Send + Sync {
