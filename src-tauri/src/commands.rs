@@ -1,5 +1,7 @@
 use crate::config::{self, AppConfig};
 use crate::keychain;
+use crate::op_log;
+use crate::project::{self, OpenedProject, ProjectSummary};
 use crate::providers::{
     anthropic::AnthropicProvider, openai_compat::OpenAICompatProvider, LLMProvider, PingResult,
 };
@@ -84,4 +86,44 @@ pub async fn run_smoke_cell(python_path: String, code: String) -> Result<String,
         }
     }
     Ok(buf)
+}
+
+#[tauri::command]
+pub async fn project_list() -> Result<Vec<ProjectSummary>, String> {
+    project::list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn project_create(display_name: String) -> Result<ProjectSummary, String> {
+    project::create(&display_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn project_open(slug: String) -> Result<OpenedProject, String> {
+    project::open(&slug).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn project_delete(slug: String) -> Result<(), String> {
+    project::delete(&slug).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn notebook_save(slug: String, notebook_json: serde_json::Value) -> Result<(), String> {
+    project::save_notebook(&slug, notebook_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn op_log_append(slug: String, entry: serde_json::Value) -> Result<u64, String> {
+    op_log::append(&slug, &entry).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn op_log_set_head(slug: String, head: u64) -> Result<(), String> {
+    op_log::set_head(&slug, head).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn op_log_read(slug: String) -> Result<Vec<serde_json::Value>, String> {
+    op_log::read_log(&slug).map_err(|e| e.to_string())
 }

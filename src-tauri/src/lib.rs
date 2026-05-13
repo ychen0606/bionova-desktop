@@ -2,6 +2,9 @@ pub mod commands;
 pub mod config;
 pub mod kernel;
 pub mod keychain;
+pub mod notebook;
+pub mod op_log;
+pub mod project;
 pub mod providers;
 pub mod python_probe;
 
@@ -18,6 +21,14 @@ pub fn run() {
             commands::provider_ping,
             commands::python_probe_windows,
             commands::run_smoke_cell,
+            commands::project_list,
+            commands::project_create,
+            commands::project_open,
+            commands::project_delete,
+            commands::notebook_save,
+            commands::op_log_append,
+            commands::op_log_set_head,
+            commands::op_log_read,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
