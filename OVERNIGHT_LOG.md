@@ -13,7 +13,8 @@
 - [x] **Frontend code** (commit `419243e`): MonacoCellEditor / Outputs / Cell / Card / PipelineCanvas / UndoRedoBar / ProjectEditor / NewProjectDialog + rewrote ProjectShell + App routing + version bump 0.2.0 + README
 - [x] **Cargo.lock fix** (commit `2844600`): re-locked after version bump (first CI run failed on --locked check)
 - [x] Tag `v0.2.0-plan2` pushed
-- [⏳] **CI** run #25830056816: passed steps 1-9, currently on Rust unit tests step #10 (the big compile). ETA ~10 min.
+- [x] **CI** run #25830056816: ALL 12 STEPS GREEN @ 22:39:55 UTC
+- [x] **MSI artifact** `BioNova_0.2.0_x64_en-US.msi` (4.6 MB) downloaded + SCP'd to `192.168.2.116:C:/Users/Administrator/Desktop/`
 
 **Tests passing locally (Linux)**:
 - Rust: 23 (was 13 in Plan 1; new: 4 notebook + 4 project + 2 op_log)
@@ -33,9 +34,7 @@
 
 ## ⏳ Still in progress
 
-- Plan 2 CI re-run (started 22:27 UTC, ETA 22:40 UTC on success)
-- After CI green: download MSI artifact → SCP to 192.168.2.116:Desktop
-- Memory + OVERNIGHT_LOG final update
+(Nothing — all overnight goals met. Plan 2 GA confirmed via CI green + MSI artifact delivered. Plans 3-5 docs written awaiting review.)
 
 ## 🚨 `<DECISION_NEEDED>` — Morning Review Backlog
 
