@@ -242,6 +242,42 @@ pub async fn ai_interpret(
 }
 
 #[tauri::command]
+pub async fn provider_probe(
+    app: tauri::AppHandle,
+) -> Result<crate::probe::ProbeReport, String> {
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let prompts_dir = resolve_prompts_dir(&app)?;
+    crate::probe::run(&cfg, &prompts_dir).await.map_err(|e| e.to_string())
+}
+
+/// Inline rewrite (Cmd+K). Returns the rewritten snippet, fences stripped.
+#[tauri::command]
+pub async fn ai_rewrite(
+    selection: String,
+    surrounding: String,
+    instruction: String,
+    max_tokens: Option<u32>,
+) -> Result<AiResponse, String> {
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let resp = ai_engine::run_inline_rewrite(
+        &cfg,
+        &selection,
+        &surrounding,
+        &instruction,
+        max_tokens.unwrap_or(2048),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(AiResponse {
+        text: ai_engine::strip_code_fences(&resp.text),
+        usage: resp.usage,
+        error: resp.error,
+    })
+}
+
+#[tauri::command]
 pub async fn chat_append(slug: String, entry: serde_json::Value) -> Result<(), String> {
     chat::append(&slug, &entry).map_err(|e| e.to_string())
 }

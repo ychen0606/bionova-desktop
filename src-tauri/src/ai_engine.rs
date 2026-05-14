@@ -181,6 +181,55 @@ fn read_api_key(cfg: &AppConfig) -> Result<String> {
         .ok_or_else(|| anyhow!("API key for {key} not found in keychain"))
 }
 
+/// Inline rewrite for the Cmd+K shortcut: takes a snippet + its surrounding
+/// cell + a free-form user instruction and asks the model to rewrite ONLY the
+/// snippet. No prompt template file — the instructions are short and stable
+/// enough that we build the messages inline.
+pub async fn run_inline_rewrite(
+    cfg: &AppConfig,
+    selection: &str,
+    surrounding: &str,
+    instruction: &str,
+    max_tokens: u32,
+) -> Result<AggregatedResult> {
+    let (provider, model_default) = build_provider(cfg, Task::GenerateCode, 0)?;
+    let api_key = read_api_key(cfg)?;
+    let system = "You rewrite a snippet of Python code per the user's instruction. \
+                  Output ONLY the rewritten snippet, no prose, no markdown fences. \
+                  Preserve original indentation. Do not add or remove top-level imports \
+                  unless strictly required by the change. Default to Chinese for comments \
+                  when adding any.";
+    let user_msg = format!(
+        "Surrounding cell (for context only — DO NOT include in output):\n```python\n{}\n```\n\n\
+         Snippet to rewrite (the only thing your reply should replace):\n```python\n{}\n```\n\n\
+         Instruction:\n{}",
+        surrounding, selection, instruction
+    );
+    let messages = vec![ChatMessage { role: "user".into(), content: user_msg, cache: false }];
+    let opts = ChatOpts {
+        model: model_default,
+        max_tokens,
+        temperature: 0.2,
+        system: Some(system.into()),
+    };
+
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    provider.chat_stream(&api_key, messages, opts, tx).await?;
+
+    let mut text = String::new();
+    let mut usage = crate::providers::UsageStats::default();
+    let mut err: Option<String> = None;
+    while let Some(c) = rx.recv().await {
+        match c {
+            ChatChunk::Text { text: t } => text.push_str(&t),
+            ChatChunk::Usage(u) => usage = u,
+            ChatChunk::Error { message } => err = Some(message),
+            ChatChunk::Done => break,
+        }
+    }
+    Ok(AggregatedResult { text, usage, error: err })
+}
+
 /// Parse the JSON array returned by `plan`. Strips accidental code fences
 /// if the model added them despite instructions.
 pub fn parse_plan_response(text: &str) -> Result<Vec<CardSpec>> {

@@ -225,9 +225,31 @@ export const ipcChat = {
   read: (slug: string) => invoke<ChatHistoryEntry[]>("chat_read", { slug }),
 };
 
+export interface ProbeReport {
+  plan_score: number;
+  code_score: number;
+  fix_score: number;
+  chinese_score: number;
+  overall_score: number;
+  notes: string[];
+}
+
 export const ipcAI = {
   plan: (vars: Record<string, string>, maxTokens?: number) =>
     invoke<CardSpec[]>("ai_plan", { vars, maxTokens: maxTokens ?? null }),
+  rewrite: (
+    selection: string,
+    surrounding: string,
+    instruction: string,
+    maxTokens?: number
+  ) =>
+    invoke<AiResponse>("ai_rewrite", {
+      selection,
+      surrounding,
+      instruction,
+      maxTokens: maxTokens ?? null,
+    }),
+  probe: () => invoke<ProbeReport>("provider_probe"),
   generateCode: (vars: Record<string, string>, maxTokens?: number) =>
     invoke<AiResponse>("ai_generate_code", { vars, maxTokens: maxTokens ?? null }),
   fixError: (vars: Record<string, string>, maxTokens?: number) =>

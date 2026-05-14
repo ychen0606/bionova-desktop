@@ -1,7 +1,9 @@
+import { useRef, useState } from "react";
 import { MonacoCellEditor } from "./MonacoCellEditor";
 import { Outputs } from "./Outputs";
 import { CellJson } from "../lib/ipc";
 import { getCellId } from "../lib/opLog";
+import { InlineAIDialog } from "./InlineAIDialog";
 
 export type StepState = "idle" | "queued" | "running" | "done" | "error";
 
@@ -25,6 +27,8 @@ export function Step({
   onDelete,
 }: Props) {
   const src = Array.isArray(cell.source) ? cell.source.join("") : cell.source;
+  const [cmdK, setCmdK] = useState<{ selection: string; surrounding: string } | null>(null);
+  const replaceHandleRef = useRef<((text: string) => void) | null>(null);
   const stateBadge: Record<StepState, string> = {
     idle: "—",
     queued: "queued",
@@ -69,7 +73,22 @@ export function Step({
         value={src as string}
         onChange={onSourceChange}
         onRun={onRun}
+        onCmdK={(selection, surrounding) => setCmdK({ selection, surrounding })}
+        registerReplaceHandle={(fn) => {
+          replaceHandleRef.current = fn;
+        }}
       />
+      {cmdK && (
+        <InlineAIDialog
+          selection={cmdK.selection}
+          surrounding={cmdK.surrounding}
+          onApply={(text) => {
+            replaceHandleRef.current?.(text);
+            setCmdK(null);
+          }}
+          onCancel={() => setCmdK(null)}
+        />
+      )}
       <Outputs outputs={cell.outputs} />
     </div>
   );
