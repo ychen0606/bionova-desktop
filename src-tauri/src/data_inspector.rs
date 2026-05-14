@@ -75,16 +75,25 @@ pub fn inspect_one(
     script_path: &Path,
     file_path: &Path,
 ) -> Result<InspectionReport> {
-    let output = Command::new(python_path)
-        .arg(script_path)
-        .arg(file_path)
-        .output()
-        .context("spawn python inspector")?;
+    let mut cmd = Command::new(python_path);
+    cmd.arg(script_path).arg(file_path);
+    hide_window(&mut cmd);
+    let output = cmd.output().context("spawn python inspector")?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
         .context("inspector did not return JSON")?;
     Ok(InspectionReport { report: parsed })
 }
+
+#[cfg(windows)]
+fn hide_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_window(_cmd: &mut Command) {}
 
 pub fn project_data_dir(slug: &str) -> Result<PathBuf> {
     let home = dirs::home_dir().context("home_dir")?;

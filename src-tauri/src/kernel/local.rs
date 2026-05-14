@@ -76,12 +76,12 @@ impl LocalKernel {
         let tmp = std::env::temp_dir().join(format!("bionova-kernel-{}.json", session_id));
         std::fs::write(&tmp, serde_json::to_string_pretty(&cf)?)?;
 
-        let child = Command::new(python_path)
-            .args(["-m", "ipykernel_launcher", "-f", tmp.to_str().unwrap()])
+        let mut cmd = Command::new(python_path);
+        cmd.args(["-m", "ipykernel_launcher", "-f", tmp.to_str().unwrap()])
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("spawn ipykernel")?;
+            .stderr(Stdio::piped());
+        hide_window(&mut cmd);
+        let child = cmd.spawn().context("spawn ipykernel")?;
 
         let ctx = zmq::Context::new();
 
@@ -207,6 +207,19 @@ impl Drop for LocalKernel {
         let _ = self.shutdown();
     }
 }
+
+/// Suppress the console window that Windows would otherwise pop up for a
+/// subprocess whose executable links the console subsystem (python.exe).
+/// No-op on Linux/macOS.
+#[cfg(windows)]
+fn hide_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_window(_cmd: &mut Command) {}
 
 fn free_port() -> Result<u16> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;

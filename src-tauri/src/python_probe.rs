@@ -75,7 +75,10 @@ fn add_if_exists(list: &mut Vec<PythonCandidate>, p: PathBuf, source: &str) {
 
 #[cfg(target_os = "windows")]
 fn which_python() -> Result<String> {
-    let out = Command::new("where").arg("python").output().context("spawn where")?;
+    let mut cmd = Command::new("where");
+    cmd.arg("python");
+    hide_window(&mut cmd);
+    let out = cmd.output().context("spawn where")?;
     if !out.status.success() {
         anyhow::bail!("where python failed");
     }
@@ -94,9 +97,10 @@ fn which_python() -> Result<String> {
 }
 
 fn python_version(path: &str) -> Result<String> {
-    let out = Command::new(path)
-        .args(["-c", "import sys; print('.'.join(map(str, sys.version_info[:3])))"])
-        .output()?;
+    let mut cmd = Command::new(path);
+    cmd.args(["-c", "import sys; print('.'.join(map(str, sys.version_info[:3])))"]);
+    hide_window(&mut cmd);
+    let out = cmd.output()?;
     if !out.status.success() {
         anyhow::bail!("python version probe failed");
     }
@@ -104,9 +108,10 @@ fn python_version(path: &str) -> Result<String> {
 }
 
 fn check_scanpy(path: &str) -> Result<(bool, Option<String>)> {
-    let out = Command::new(path)
-        .args(["-c", "import scanpy; print(scanpy.__version__)"])
-        .output()?;
+    let mut cmd = Command::new(path);
+    cmd.args(["-c", "import scanpy; print(scanpy.__version__)"]);
+    hide_window(&mut cmd);
+    let out = cmd.output()?;
     if out.status.success() {
         let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
         Ok((true, Some(v)))
@@ -114,6 +119,16 @@ fn check_scanpy(path: &str) -> Result<(bool, Option<String>)> {
         Ok((false, None))
     }
 }
+
+#[cfg(windows)]
+fn hide_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_window(_cmd: &mut Command) {}
 
 #[cfg(test)]
 mod tests {
