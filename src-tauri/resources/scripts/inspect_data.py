@@ -28,6 +28,13 @@ def inspect(path: str) -> dict:
 def inspect_h5ad(path: str, size: int) -> dict:
     import anndata
     a = anndata.read_h5ad(path, backed="r")
+    obs_head = []
+    try:
+        head_df = a.obs.head(5)
+        for _, row in head_df.iterrows():
+            obs_head.append({str(k): _to_jsonable(v) for k, v in row.items()})
+    except Exception:
+        pass
     out = {
         "kind": "h5ad",
         "size_bytes": size,
@@ -38,12 +45,27 @@ def inspect_h5ad(path: str, size: int) -> dict:
         "layers": list(a.layers.keys()),
         "obsm_keys": list(a.obsm.keys()),
         "uns_keys": list(a.uns.keys())[:30],
+        "obs_head": obs_head,
     }
     try:
         a.file.close()
     except Exception:
         pass
     return out
+
+
+def _to_jsonable(v):
+    import math
+    if v is None:
+        return None
+    if isinstance(v, (str, bool, int)):
+        return v
+    if isinstance(v, float):
+        return v if math.isfinite(v) else None
+    try:
+        return str(v)
+    except Exception:
+        return None
 
 
 def inspect_10x_h5(path: str, size: int) -> dict:
@@ -91,11 +113,15 @@ def inspect_table(path: str, size: int, ext: str) -> dict:
     sep = "," if ext == ".csv" else "\t"
     cols = []
     n_rows = 0
+    preview = []
     with open(path, encoding="utf-8", errors="replace") as f:
         header = f.readline().strip()
         cols = header.split(sep)[:30]
-        for _ in f:
+        for line in f:
             n_rows += 1
+            if len(preview) < 5:
+                row = line.rstrip("\r\n").split(sep)
+                preview.append(row[: len(cols)])
             if n_rows > 500_000:
                 break
     return {
@@ -103,6 +129,7 @@ def inspect_table(path: str, size: int, ext: str) -> dict:
         "size_bytes": size,
         "n_rows_first_500k": n_rows,
         "columns": cols,
+        "preview_rows": preview,
     }
 
 
