@@ -27,7 +27,7 @@
     "active": true,
     "targets": ["msi"],
     "icon": ["icons/icon.ico"],
-    "resources": ["resources/scripts/*.py"],
+    "resources": ["resources/scripts/*.py", "resources/prompts/*.md"],
     "category": "DeveloperTool",
     "shortDescription": "AI-driven scRNA-seq desktop IDE",
     "longDescription": "BioNova is a desktop AI-assisted IDE for single-cell RNA-seq analysis. Bring your own AI API key and (optionally) HPC. Free and open.",

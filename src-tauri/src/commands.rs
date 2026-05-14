@@ -1,5 +1,7 @@
+use crate::ai_engine::{self, CardSpec, Task};
 use crate::config::{self, AppConfig};
 use crate::kernel::{session::SessionManager, ExecutionResult, VarInfo};
+use crate::providers::ChatChunk;
 use crate::keychain;
 use crate::op_log;
 use crate::project::{self, OpenedProject, ProjectSummary};
@@ -134,6 +136,137 @@ pub async fn kernel_inspect_vars(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KernelStatus {
     pub running: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AiResponse {
+    pub text: String,
+    pub usage: crate::providers::UsageStats,
+    pub error: Option<String>,
+}
+
+fn resolve_prompts_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .resolve("resources/prompts", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_plan(
+    app: tauri::AppHandle,
+    vars: std::collections::HashMap<String, String>,
+    max_tokens: Option<u32>,
+) -> Result<Vec<CardSpec>, String> {
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let prompts_dir = resolve_prompts_dir(&app)?;
+    let resp = ai_engine::run_task(&cfg, &prompts_dir, Task::Plan, vars, max_tokens.unwrap_or(2048))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(err) = resp.error {
+        return Err(err);
+    }
+    ai_engine::parse_plan_response(&resp.text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_generate_code(
+    app: tauri::AppHandle,
+    vars: std::collections::HashMap<String, String>,
+    max_tokens: Option<u32>,
+) -> Result<AiResponse, String> {
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let prompts_dir = resolve_prompts_dir(&app)?;
+    let resp = ai_engine::run_task(
+        &cfg,
+        &prompts_dir,
+        Task::GenerateCode,
+        vars,
+        max_tokens.unwrap_or(4096),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(AiResponse {
+        text: ai_engine::strip_code_fences(&resp.text),
+        usage: resp.usage,
+        error: resp.error,
+    })
+}
+
+#[tauri::command]
+pub async fn ai_fix_error(
+    app: tauri::AppHandle,
+    vars: std::collections::HashMap<String, String>,
+    max_tokens: Option<u32>,
+) -> Result<AiResponse, String> {
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let prompts_dir = resolve_prompts_dir(&app)?;
+    let resp = ai_engine::run_task(
+        &cfg,
+        &prompts_dir,
+        Task::FixError,
+        vars,
+        max_tokens.unwrap_or(4096),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(AiResponse {
+        text: ai_engine::strip_code_fences(&resp.text),
+        usage: resp.usage,
+        error: resp.error,
+    })
+}
+
+#[tauri::command]
+pub async fn ai_interpret(
+    app: tauri::AppHandle,
+    vars: std::collections::HashMap<String, String>,
+    max_tokens: Option<u32>,
+) -> Result<AiResponse, String> {
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let prompts_dir = resolve_prompts_dir(&app)?;
+    let resp = ai_engine::run_task(
+        &cfg,
+        &prompts_dir,
+        Task::Interpret,
+        vars,
+        max_tokens.unwrap_or(512),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(AiResponse { text: resp.text, usage: resp.usage, error: resp.error })
+}
+
+/// Streaming chat. Emits one event per chunk on the `ai-chat-chunk-<slug>`
+/// channel; UI listens via `listen()`. Returns when stream done.
+#[tauri::command]
+pub async fn ai_chat_stream(
+    app: tauri::AppHandle,
+    slug: String,
+    vars: std::collections::HashMap<String, String>,
+    max_tokens: Option<u32>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    let cfg = config::read(&config::default_config_path().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let prompts_dir = resolve_prompts_dir(&app)?;
+    let event_name = format!("ai-chat-chunk-{}", slug);
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<ChatChunk>();
+    let drive = tokio::spawn(async move {
+        ai_engine::run_chat_stream(&cfg, &prompts_dir, vars, max_tokens.unwrap_or(2048), tx).await
+    });
+
+    while let Some(chunk) = rx.recv().await {
+        let _ = app.emit(&event_name, &chunk);
+        if matches!(chunk, ChatChunk::Done) {
+            break;
+        }
+    }
+    drive.await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

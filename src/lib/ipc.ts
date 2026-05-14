@@ -183,6 +183,61 @@ export const ipcData = {
     invoke<InspectionReport>("data_inspect", { slug, filename }),
 };
 
+// --- Plan 3 AI engine ---
+
+export interface CardSpec {
+  id: string;
+  title: string;
+  rationale: string;
+}
+
+export interface AIUsageStats {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+}
+
+export interface AiResponse {
+  text: string;
+  usage: AIUsageStats;
+  error: string | null;
+}
+
+export type ChatChunk =
+  | { kind: "text"; text: string }
+  | { kind: "usage"; input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }
+  | { kind: "done" }
+  | { kind: "error"; message: string };
+
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
+
+export const ipcAI = {
+  plan: (vars: Record<string, string>, maxTokens?: number) =>
+    invoke<CardSpec[]>("ai_plan", { vars, maxTokens: maxTokens ?? null }),
+  generateCode: (vars: Record<string, string>, maxTokens?: number) =>
+    invoke<AiResponse>("ai_generate_code", { vars, maxTokens: maxTokens ?? null }),
+  fixError: (vars: Record<string, string>, maxTokens?: number) =>
+    invoke<AiResponse>("ai_fix_error", { vars, maxTokens: maxTokens ?? null }),
+  interpret: (vars: Record<string, string>, maxTokens?: number) =>
+    invoke<AiResponse>("ai_interpret", { vars, maxTokens: maxTokens ?? null }),
+  /// Start a streaming chat. Returns an unlisten function — caller MUST
+  /// invoke it after the stream ends (after Done) to avoid leaking listeners.
+  chatStream: async (
+    slug: string,
+    vars: Record<string, string>,
+    onChunk: (c: ChatChunk) => void,
+    maxTokens?: number
+  ): Promise<UnlistenFn> => {
+    const unlisten = await listen<ChatChunk>(`ai-chat-chunk-${slug}`, (e) => onChunk(e.payload));
+    invoke<void>("ai_chat_stream", { slug, vars, maxTokens: maxTokens ?? null }).catch((err) => {
+      onChunk({ kind: "error", message: String(err) });
+      onChunk({ kind: "done" });
+    });
+    return unlisten;
+  },
+};
+
 export const ipcProject = {
   list: () => invoke<ProjectSummary[]>("project_list"),
   create: (display_name: string) =>

@@ -1,11 +1,13 @@
 pub mod commands;
 pub mod config;
 pub mod data_inspector;
+pub mod ai_engine;
 pub mod kernel;
 pub mod keychain;
 pub mod notebook;
 pub mod op_log;
 pub mod project;
+pub mod prompts;
 pub mod providers;
 pub mod python_probe;
 
@@ -36,6 +38,11 @@ pub fn run() {
             commands::kernel_shutdown,
             commands::kernel_status,
             commands::kernel_inspect_vars,
+            commands::ai_plan,
+            commands::ai_generate_code,
+            commands::ai_fix_error,
+            commands::ai_interpret,
+            commands::ai_chat_stream,
             commands::project_list,
             commands::project_create,
             commands::project_open,
