@@ -223,6 +223,28 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     });
   };
 
+  const reorderCardOp = (card_id: string, new_order: number) => {
+    const card = nb.metadata.bionova.cards.find((c) => c.id === card_id);
+    if (!card) return;
+    const old_order = card.order;
+    if (old_order === new_order) return;
+    commitOp({
+      op: "card_reorder",
+      fwd: { card_id, old_order, new_order },
+      rev: { card_id, old_order: new_order, new_order: old_order },
+    });
+  };
+
+  const reorderCellOp = (cell_id: string, new_position: number) => {
+    const old_position = nb.cells.findIndex((c) => getCellId(c) === cell_id);
+    if (old_position < 0 || old_position === new_position) return;
+    commitOp({
+      op: "cell_reorder",
+      fwd: { cell_id, old_position, new_position },
+      rev: { cell_id, old_position: new_position, new_position: old_position },
+    });
+  };
+
   const clearCell = (cell_id: string) => {
     const idx = nb.cells.findIndex((c) => getCellId(c) === cell_id);
     if (idx < 0) return;
@@ -299,11 +321,13 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         onAddCard={addCard}
         onRenameCard={renameCard}
         onDeleteCard={deleteCard}
+        onReorderCard={reorderCardOp}
         onAddCell={addCell}
         onCellSourceChange={setCellSrc}
         onCellRun={runCell}
         onCellClear={clearCell}
         onCellDelete={deleteCell}
+        onReorderCell={reorderCellOp}
       />
     </div>
   );

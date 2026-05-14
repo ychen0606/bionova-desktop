@@ -36,6 +36,16 @@ export type Op =
       op: "clear_cell_outputs";
       fwd: { cell_id: string; old_outputs: any[] };
       rev: { cell_id: string; old_outputs: any[] };
+    }
+  | {
+      op: "card_reorder";
+      fwd: { card_id: string; old_order: number; new_order: number };
+      rev: { card_id: string; old_order: number; new_order: number };
+    }
+  | {
+      op: "cell_reorder";
+      fwd: { cell_id: string; old_position: number; new_position: number };
+      rev: { cell_id: string; old_position: number; new_position: number };
     };
 
 export function getCellId(cell: CellJson): string {
@@ -103,8 +113,36 @@ export function applyForward(nb: NotebookJson, op: Op): NotebookJson {
       if (idx >= 0) clone.cells[idx].outputs = [];
       break;
     }
+    case "card_reorder": {
+      reorderCards(clone, op.fwd.card_id, op.fwd.new_order);
+      break;
+    }
+    case "cell_reorder": {
+      reorderCell(clone, op.fwd.cell_id, op.fwd.new_position);
+      break;
+    }
   }
   return clone;
+}
+
+function reorderCards(nb: NotebookJson, card_id: string, new_order: number) {
+  const sorted = [...nb.metadata.bionova.cards].sort((a, b) => a.order - b.order);
+  const idx = sorted.findIndex((c) => c.id === card_id);
+  if (idx < 0) return;
+  const [moved] = sorted.splice(idx, 1);
+  const insertAt = Math.max(0, Math.min(new_order, sorted.length));
+  sorted.splice(insertAt, 0, moved);
+  sorted.forEach((c, i) => (c.order = i));
+  // Reflect new order on the original card objects (mutated in place).
+  nb.metadata.bionova.cards = sorted;
+}
+
+function reorderCell(nb: NotebookJson, cell_id: string, new_position: number) {
+  const idx = nb.cells.findIndex((c) => getCellId(c) === cell_id);
+  if (idx < 0) return;
+  const [moved] = nb.cells.splice(idx, 1);
+  const insertAt = Math.max(0, Math.min(new_position, nb.cells.length));
+  nb.cells.splice(insertAt, 0, moved);
 }
 
 export function applyReverse(nb: NotebookJson, op: Op): NotebookJson {
@@ -144,6 +182,15 @@ export function applyReverse(nb: NotebookJson, op: Op): NotebookJson {
     case "clear_cell_outputs": {
       const idx = clone.cells.findIndex((c) => getCellId(c) === op.rev.cell_id);
       if (idx >= 0) clone.cells[idx].outputs = op.rev.old_outputs;
+      break;
+    }
+    case "card_reorder": {
+      // rev encodes the inverse op as a forward move: new_order = original slot.
+      reorderCards(clone, op.rev.card_id, op.rev.new_order);
+      break;
+    }
+    case "cell_reorder": {
+      reorderCell(clone, op.rev.cell_id, op.rev.new_position);
       break;
     }
   }
