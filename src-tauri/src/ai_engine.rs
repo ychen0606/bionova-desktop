@@ -171,13 +171,14 @@ fn build_provider(cfg: &AppConfig, task: Task, attempt: u32) -> Result<(Box<dyn 
 }
 
 fn read_api_key(cfg: &AppConfig) -> Result<String> {
-    let kind = cfg
+    // OnboardingWizard saves the key as `provider:<kind>:apikey`.
+    let key = cfg
         .ai_provider
         .as_ref()
-        .map(|p| format!("ai_provider/{}", p.kind))
+        .map(|p| format!("provider:{}:apikey", p.kind))
         .ok_or_else(|| anyhow!("no provider configured"))?;
-    keychain::get_secret(&kind)?
-        .ok_or_else(|| anyhow!("API key for {kind} not found in keychain"))
+    keychain::get_secret(&key)?
+        .ok_or_else(|| anyhow!("API key for {key} not found in keychain"))
 }
 
 /// Parse the JSON array returned by `plan`. Strips accidental code fences
