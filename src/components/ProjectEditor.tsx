@@ -27,6 +27,30 @@ import { AIChat } from "./AIChat";
 import { AutopilotPanel } from "./AutopilotPanel";
 import { StepState } from "./Step";
 
+function buildAdataStateString(meta: Record<string, string>): string {
+  const parts: string[] = [];
+  if (meta.n_obs && meta.n_vars) parts.push(`shape: ${meta.n_obs} cells × ${meta.n_vars} genes`);
+  if (meta.obs_columns) parts.push(`obs cols: [${meta.obs_columns}]`);
+  if (meta.var_columns) parts.push(`var cols: [${meta.var_columns}]`);
+  if (meta.layers) parts.push(`layers: [${meta.layers}]`);
+  if (meta.obsm_keys) parts.push(`obsm: [${meta.obsm_keys}]`);
+  if (parts.length === 0) parts.push("(empty AnnData state; first card should sc.read_h5ad)");
+  return parts.join("; ");
+}
+
+function makeLoadCellCode(slug: string, fileName: string): string {
+  // POSIX-style joined path; works on Win too because Python normalizes.
+  const escaped = fileName.replace(/"/g, '\\"');
+  const slugEsc = slug.replace(/"/g, '\\"');
+  return `import os, scanpy as sc
+
+DATA_DIR = os.path.expanduser("~/BioNova/projects/${slugEsc}/data")
+adata = sc.read_h5ad(os.path.join(DATA_DIR, "${escaped}"))
+print(adata)
+print("obs cols:", list(adata.obs.columns))
+print("var cols:", list(adata.var.columns))`;
+}
+
 /// Translate a kernel ExecutionResult into the array of nbformat output dicts
 /// stored on a notebook cell.
 function executionResultToOutputs(out: ExecutionResult): any[] {
@@ -369,15 +393,52 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     setLastOp("autofix exhausted (5 rounds)");
   };
 
-  const applyAutopilotPlan = async (cards: CardSpec[]) => {
-    // 1) Insert one Card per plan item (op_log card_insert).
-    // 2) For each new card, ask AI for code, split on # ---NEW CELL--- and
-    //    insert each chunk as a Step via cell_insert.
-    // `nb` state in this closure is stale across commitOp awaits, so track
-    // the cell position cursor manually.
+  const applyAutopilotPlan = async (
+    cards: CardSpec[],
+    metadata: Record<string, string>
+  ) => {
+    // Step A: insert a system "Load data" card with concrete code that loads
+    //   the chosen file into `adata`. This lets every AI card after it
+    //   assume `adata` exists. (Without this the AI has no idea what file
+    //   to read, so the very first generated cell tends to fail.)
+    // Step B: for each AI-proposed card, insert it and call generateCode
+    //   passing the REAL adata shape/obs/var/layers as `adata_state`.
     let cardCursor = nb.metadata.bionova.cards.length;
     let cellCursor = nb.cells.length;
     const prevSummaries: string[] = [];
+
+    const dataFileName = metadata.data_file_name;
+    const adataStateString = buildAdataStateString(metadata);
+
+    if (dataFileName) {
+      const loadCard: CardMeta = {
+        id: uuid(),
+        title: "📥 加载数据",
+        order: cardCursor++,
+        collapsed: false,
+        ai_generated: false,
+      };
+      await commitOp({
+        op: "card_insert",
+        fwd: { card: loadCard },
+        rev: { card_id: loadCard.id },
+      });
+      const loadCode = makeLoadCellCode(slug, dataFileName);
+      const cell = newCell(loadCard.id, loadCode);
+      const cellId = getCellId(cell);
+      await commitOp({
+        op: "cell_insert",
+        fwd: {
+          cell_id: cellId,
+          position: cellCursor++,
+          card_id: loadCard.id,
+          source: loadCode,
+        },
+        rev: { cell_id: cellId },
+      });
+      prevSummaries.push(`load_data: 把 ${dataFileName} 读入 adata`);
+    }
+
     for (const spec of cards) {
       const cardMeta: CardMeta = {
         id: uuid(),
@@ -396,7 +457,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
           card_id: spec.id,
           card_title: spec.title,
           prev_summaries: prevSummaries.join("; ") || "(none)",
-          adata_state: "(see prior cards)",
+          adata_state: adataStateString,
           scanpy_version: "1.x",
         },
         4096
@@ -460,8 +521,11 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
                 obs_columns: (rep.obs_columns ?? []).join(", "),
                 var_columns: (rep.var_columns ?? []).join(", "),
                 layers: (rep.layers ?? []).join(", "),
+                obsm_keys: (rep.obsm_keys ?? []).join(", "),
                 source_hint: `h5ad: ${h5ad.name}`,
                 user_intent: "",
+                // applyAutopilotPlan uses these; plan.md ignores unknown keys.
+                data_file_name: h5ad.name,
               };
             }
             // No h5ad — describe what is there.
@@ -471,12 +535,14 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
               obs_columns: "",
               var_columns: "",
               layers: "",
+              obsm_keys: "",
               source_hint: files.map((f) => `${f.kind_hint}:${f.name}`).join(", ") || "(empty)",
               user_intent: "",
+              data_file_name: "",
             };
           }}
-          onPlanAccepted={async (cards) => {
-            await applyAutopilotPlan(cards);
+          onPlanAccepted={async (cards, metadata) => {
+            await applyAutopilotPlan(cards, metadata);
           }}
         />
       )}

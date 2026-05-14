@@ -3,9 +3,10 @@ import { CardSpec, ipcAI } from "../lib/ipc";
 import { PlanReview } from "./PlanReview";
 
 interface Props {
-  /// Called after the user accepts a plan; receives the list of cards to
-  /// turn into op_log card_insert ops + sequential code generation.
-  onPlanAccepted: (cards: CardSpec[]) => Promise<void>;
+  /// Called after the user accepts a plan; receives the list of cards plus
+  /// the metadata we already fetched (so ProjectEditor can build the data
+  /// loading Step and pass the real adata state to each generateCode call).
+  onPlanAccepted: (cards: CardSpec[], metadata: Record<string, string>) => Promise<void>;
   /// Provides Autopilot the AnnData metadata to feed `ai_plan`. Returned
   /// from the caller because it inspects the first data file in the
   /// project's data folder via existing ipcData.list/inspect.
@@ -17,6 +18,7 @@ export function AutopilotPanel({ onPlanAccepted, fetchAnnDataVars }: Props) {
     "idle"
   );
   const [plan, setPlan] = useState<CardSpec[]>([]);
+  const [planMeta, setPlanMeta] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
 
   async function start() {
@@ -26,6 +28,7 @@ export function AutopilotPanel({ onPlanAccepted, fetchAnnDataVars }: Props) {
       const vars = await fetchAnnDataVars();
       const cards = await ipcAI.plan(vars, 2048);
       setPlan(cards);
+      setPlanMeta(vars);
       setStage("review");
     } catch (e: any) {
       setError(String(e));
@@ -77,7 +80,7 @@ export function AutopilotPanel({ onPlanAccepted, fetchAnnDataVars }: Props) {
         onAccept={async (accepted) => {
           setStage("applying");
           try {
-            await onPlanAccepted(accepted);
+            await onPlanAccepted(accepted, planMeta);
             setStage("idle");
           } catch (e: any) {
             setError(String(e));
