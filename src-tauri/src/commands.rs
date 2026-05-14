@@ -1,4 +1,5 @@
 use crate::config::{self, AppConfig};
+use crate::kernel::{session::SessionManager, ExecutionResult};
 use crate::keychain;
 use crate::op_log;
 use crate::project::{self, OpenedProject, ProjectSummary};
@@ -61,32 +62,70 @@ pub async fn python_probe_windows() -> Result<Vec<PythonCandidate>, String> {
     python_probe::probe_windows().map_err(|e| e.to_string())
 }
 
-/// Single-cell smoke execution. Spawns a fresh ipykernel for this single cell,
-/// returns concatenated stdout text after up to 10 s, or an error.
+/// Legacy one-shot smoke cell: spawns a fresh kernel just for this call.
+/// Kept so the Plan 1 smoke screen (`CellExecSmoke`) keeps working without
+/// going through project state. Project code paths use `cell_execute` instead.
 #[tauri::command]
 pub async fn run_smoke_cell(python_path: String, code: String) -> Result<String, String> {
-    use crate::kernel::{local::LocalKernel, KernelEvent};
+    use crate::kernel::local::LocalKernel;
     use std::time::Duration;
 
-    let (mut k, rx) = LocalKernel::spawn(&python_path).map_err(|e| e.to_string())?;
-    k.execute(&code).map_err(|e| e.to_string())?;
-    let mut buf = String::new();
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while std::time::Instant::now() < deadline {
-        if let Ok(ev) = rx.recv_timeout(Duration::from_millis(200)) {
-            match ev {
-                KernelEvent::Stream { text, .. } => buf.push_str(&text),
-                KernelEvent::ExecuteError { ename, evalue, .. } => {
-                    return Err(format!("{ename}: {evalue}"));
-                }
-                _ => {}
-            }
-        }
-        if !buf.is_empty() && buf.ends_with('\n') {
-            break;
-        }
+    let mut k = LocalKernel::spawn(&python_path).map_err(|e| e.to_string())?;
+    let out = k
+        .execute_and_collect(&code, Duration::from_secs(15))
+        .map_err(|e| e.to_string())?;
+    if let Some(err) = out.error {
+        return Err(format!("{}: {}", err.ename, err.evalue));
     }
-    Ok(buf)
+    Ok(out.stdout)
+}
+
+/// Persistent project kernel — execute one cell, reusing the kernel for `slug`.
+#[tauri::command]
+pub async fn cell_execute(
+    mgr: tauri::State<'_, SessionManager>,
+    slug: String,
+    python_path: String,
+    code: String,
+    timeout_secs: Option<u64>,
+) -> Result<ExecutionResult, String> {
+    use std::time::Duration;
+    let secs = timeout_secs.unwrap_or(120);
+    mgr.execute(&slug, &python_path, &code, Duration::from_secs(secs))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn kernel_restart(
+    mgr: tauri::State<'_, SessionManager>,
+    slug: String,
+    python_path: String,
+) -> Result<(), String> {
+    mgr.restart(&slug, &python_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn kernel_shutdown(
+    mgr: tauri::State<'_, SessionManager>,
+    slug: String,
+) -> Result<(), String> {
+    mgr.shutdown(&slug);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn kernel_status(
+    mgr: tauri::State<'_, SessionManager>,
+    slug: String,
+) -> Result<KernelStatus, String> {
+    Ok(KernelStatus {
+        running: mgr.is_running(&slug),
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KernelStatus {
+    pub running: bool,
 }
 
 #[tauri::command]

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod local;
+pub mod session;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "msg_type", content = "content")]
@@ -17,4 +18,30 @@ pub enum KernelEvent {
     ExecuteError { ename: String, evalue: String, traceback: Vec<String> },
     /// Cell finished cleanly.
     ExecuteDone { execution_count: i64, status: String },
+    /// Kernel busy/idle transitions (iopub status messages).
+    Status { state: String },
+}
+
+/// JSON-friendly summary returned by `cell_execute` after the kernel goes idle.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ExecutionResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub display_data: Vec<DisplayItem>,
+    pub execute_result: Option<String>,
+    pub execution_count: i64,
+    pub error: Option<ExecutionError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplayItem {
+    pub mime: String,
+    pub data: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionError {
+    pub ename: String,
+    pub evalue: String,
+    pub traceback: Vec<String>,
 }

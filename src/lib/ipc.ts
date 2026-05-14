@@ -119,6 +119,44 @@ export const ipc = {
     invoke<string>("run_smoke_cell", { pythonPath, code }),
 };
 
+export interface DisplayItem {
+  mime: string;
+  data: string;
+}
+
+export interface ExecutionError {
+  ename: string;
+  evalue: string;
+  traceback: string[];
+}
+
+export interface ExecutionResult {
+  stdout: string;
+  stderr: string;
+  display_data: DisplayItem[];
+  execute_result: string | null;
+  execution_count: number;
+  error: ExecutionError | null;
+}
+
+export interface KernelStatus {
+  running: boolean;
+}
+
+export const ipcKernel = {
+  execute: (slug: string, pythonPath: string, code: string, timeoutSecs?: number) =>
+    invoke<ExecutionResult>("cell_execute", {
+      slug,
+      pythonPath,
+      code,
+      timeoutSecs: timeoutSecs ?? null,
+    }),
+  restart: (slug: string, pythonPath: string) =>
+    invoke<void>("kernel_restart", { slug, pythonPath }),
+  shutdown: (slug: string) => invoke<void>("kernel_shutdown", { slug }),
+  status: (slug: string) => invoke<KernelStatus>("kernel_status", { slug }),
+};
+
 export interface DataFile {
   name: string;
   size_bytes: number;

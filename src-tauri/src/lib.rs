@@ -21,6 +21,7 @@ pub(crate) mod test_helpers {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(kernel::session::SessionManager::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::set_config,
@@ -30,6 +31,10 @@ pub fn run() {
             commands::provider_ping,
             commands::python_probe_windows,
             commands::run_smoke_cell,
+            commands::cell_execute,
+            commands::kernel_restart,
+            commands::kernel_shutdown,
+            commands::kernel_status,
             commands::project_list,
             commands::project_create,
             commands::project_open,

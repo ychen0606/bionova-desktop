@@ -4,6 +4,19 @@ import { ProjectEditor } from "./ProjectEditor";
 
 vi.mock("../lib/ipc", () => ({
   ipc: { getConfig: vi.fn(async () => ({ python_env: { python_path: "x" } })) },
+  ipcKernel: {
+    execute: vi.fn(async () => ({
+      stdout: "",
+      stderr: "",
+      display_data: [],
+      execute_result: null,
+      execution_count: 1,
+      error: null,
+    })),
+    restart: vi.fn(async () => {}),
+    shutdown: vi.fn(async () => {}),
+    status: vi.fn(async () => ({ running: false })),
+  },
   ipcData: {
     list: vi.fn(async () => []),
     inspect: vi.fn(async () => ({ report: {} })),

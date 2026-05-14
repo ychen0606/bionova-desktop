@@ -6,6 +6,7 @@ interface Props {
   onRedo: () => void;
   onBack: () => void;
   projectName: string;
+  onRestartKernel?: () => void;
 }
 
 export function UndoRedoBar(p: Props) {
@@ -23,6 +24,16 @@ export function UndoRedoBar(p: Props) {
       </button>
       <span className="font-semibold">{p.projectName}</span>
       <span className="ml-auto" />
+      {p.onRestartKernel && (
+        <button
+          onClick={p.onRestartKernel}
+          className="px-2 py-1 bg-amber-100 rounded text-xs border border-amber-300"
+          data-testid="restart-kernel-btn"
+          title="Wipe in-kernel state (variables, imports) and start fresh"
+        >
+          ↻ Restart kernel
+        </button>
+      )}
       <button
         onClick={p.onUndo}
         disabled={!p.canUndo}

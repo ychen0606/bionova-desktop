@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { v4 as uuid } from "uuid";
 import {
   ipc,
+  ipcKernel,
   ipcProject,
+  ExecutionResult,
   NotebookJson,
   OpEntry,
   CardMeta,
@@ -18,6 +20,38 @@ import { PipelineCanvas } from "./PipelineCanvas";
 import { UndoRedoBar } from "./UndoRedoBar";
 import { DataPanel } from "./DataPanel";
 import { StepState } from "./Step";
+
+/// Translate a kernel ExecutionResult into the array of nbformat output dicts
+/// stored on a notebook cell.
+function executionResultToOutputs(out: ExecutionResult): any[] {
+  const items: any[] = [];
+  if (out.stdout) {
+    items.push({ output_type: "stream", name: "stdout", text: out.stdout });
+  }
+  if (out.stderr) {
+    items.push({ output_type: "stream", name: "stderr", text: out.stderr });
+  }
+  for (const d of out.display_data) {
+    items.push({ output_type: "display_data", data: { [d.mime]: d.data }, metadata: {} });
+  }
+  if (out.execute_result != null) {
+    items.push({
+      output_type: "execute_result",
+      execution_count: out.execution_count,
+      data: { "text/plain": out.execute_result },
+      metadata: {},
+    });
+  }
+  if (out.error) {
+    items.push({
+      output_type: "error",
+      ename: out.error.ename,
+      evalue: out.error.evalue,
+      traceback: out.error.traceback,
+    });
+  }
+  return items;
+}
 
 interface Props {
   slug: string;
@@ -111,6 +145,14 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
 
+  // Kernel teardown on unmount — declared before any conditional return so
+  // hook ordering stays stable across renders.
+  useEffect(() => {
+    return () => {
+      ipcKernel.shutdown(slug).catch(() => {});
+    };
+  }, [slug]);
+
   if (!nb) return <div className="p-6">loading project...</div>;
 
   const addCard = () => {
@@ -202,16 +244,16 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     try {
       const cfg = await ipc.getConfig();
       if (!cfg.python_env) throw new Error("Python env not configured");
-      const out = await ipc.runSmokeCell(cfg.python_env.python_path, src);
+      const out = await ipcKernel.execute(slug, cfg.python_env.python_path, src);
       const next: NotebookJson = JSON.parse(JSON.stringify(nb));
-      next.cells[idx].outputs = [
-        { output_type: "stream", name: "stdout", text: out },
-      ];
-      next.cells[idx].execution_count =
-        (next.cells[idx].execution_count ?? 0) + 1;
+      next.cells[idx].outputs = executionResultToOutputs(out);
+      next.cells[idx].execution_count = out.execution_count;
       setNb(next);
       debounceSave(next);
-      setCellStates((s) => ({ ...s, [cell_id]: "done" }));
+      setCellStates((s) => ({
+        ...s,
+        [cell_id]: out.error ? "error" : "done",
+      }));
     } catch (e: any) {
       const next: NotebookJson = JSON.parse(JSON.stringify(nb));
       next.cells[idx].outputs = [
@@ -228,6 +270,13 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     }
   };
 
+  const restartKernel = async () => {
+    const cfg = await ipc.getConfig();
+    if (!cfg.python_env) return;
+    await ipcKernel.restart(slug, cfg.python_env.python_path);
+    setLastOp("kernel restart");
+  };
+
   const canUndo = head > 0;
   const canRedo = log.some((e) => (e.seq ?? 0) > head);
 
@@ -241,6 +290,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         onRedo={redo}
         onBack={onBack}
         projectName={projectName}
+        onRestartKernel={restartKernel}
       />
       <DataPanel slug={slug} />
       <PipelineCanvas
