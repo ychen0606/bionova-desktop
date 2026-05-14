@@ -7,6 +7,14 @@ use serde_json::{json, Value};
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 
+fn join_url(base: &str, endpoint_after_v1: &str) -> String {
+    let mut t = base.trim_end_matches('/');
+    if t.ends_with("/v1") {
+        t = &t[..t.len() - 3];
+    }
+    format!("{}/v1{}", t.trim_end_matches('/'), endpoint_after_v1)
+}
+
 pub struct AnthropicProvider {
     pub base_url: String,
     pub model: String,
@@ -47,7 +55,7 @@ impl LLMProvider for AnthropicProvider {
         };
         let resp = self
             .client
-            .post(format!("{}/v1/messages", self.base_url.trim_end_matches('/')))
+            .post(join_url(&self.base_url, "/messages"))
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
@@ -112,7 +120,7 @@ impl LLMProvider for AnthropicProvider {
 
         let resp = self
             .client
-            .post(format!("{}/v1/messages", self.base_url.trim_end_matches('/')))
+            .post(join_url(&self.base_url, "/messages"))
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")

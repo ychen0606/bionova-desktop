@@ -7,6 +7,18 @@ use serde_json::{json, Value};
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 
+/// Build a request URL by joining base_url + endpoint, tolerating both
+/// `https://api.example.com` and `https://api.example.com/v1` from the user
+/// (OpenAI docs show the latter). Without this, we'd POST to
+/// `https://.../v1/v1/chat/completions` and the server 404s.
+fn join_url(base: &str, endpoint_after_v1: &str) -> String {
+    let mut t = base.trim_end_matches('/');
+    if t.ends_with("/v1") {
+        t = &t[..t.len() - 3];
+    }
+    format!("{}/v1{}", t.trim_end_matches('/'), endpoint_after_v1)
+}
+
 pub struct OpenAICompatProvider {
     pub base_url: String,
     pub model: String,
@@ -47,7 +59,7 @@ impl LLMProvider for OpenAICompatProvider {
         };
         let resp = self
             .client
-            .post(format!("{}/v1/chat/completions", self.base_url.trim_end_matches('/')))
+            .post(join_url(&self.base_url, "/chat/completions"))
             .bearer_auth(api_key)
             .header("content-type", "application/json")
             .json(&body)
@@ -96,7 +108,7 @@ impl LLMProvider for OpenAICompatProvider {
 
         let resp = self
             .client
-            .post(format!("{}/v1/chat/completions", self.base_url.trim_end_matches('/')))
+            .post(join_url(&self.base_url, "/chat/completions"))
             .bearer_auth(api_key)
             .header("content-type", "application/json")
             .header("accept", "text/event-stream")
@@ -175,6 +187,22 @@ fn handle_openai_event(event: &str, tx: &UnboundedSender<ChatChunk>, usage: &mut
 mod tests {
     use super::*;
     use httpmock::prelude::*;
+
+    #[test]
+    fn join_url_handles_both_forms() {
+        assert_eq!(
+            join_url("https://api.openai.com", "/chat/completions"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+        assert_eq!(
+            join_url("https://api.openai.com/v1", "/chat/completions"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+        assert_eq!(
+            join_url("https://api.longxiadev.store/v1/", "/chat/completions"),
+            "https://api.longxiadev.store/v1/chat/completions"
+        );
+    }
 
     #[tokio::test]
     async fn ping_success() {
