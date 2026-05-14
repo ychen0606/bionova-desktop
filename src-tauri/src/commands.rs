@@ -1,4 +1,5 @@
 use crate::ai_engine::{self, CardSpec, Task};
+use crate::chat;
 use crate::config::{self, AppConfig};
 use crate::kernel::{session::SessionManager, ExecutionResult, VarInfo};
 use crate::providers::ChatChunk;
@@ -238,6 +239,16 @@ pub async fn ai_interpret(
     .await
     .map_err(|e| e.to_string())?;
     Ok(AiResponse { text: resp.text, usage: resp.usage, error: resp.error })
+}
+
+#[tauri::command]
+pub async fn chat_append(slug: String, entry: serde_json::Value) -> Result<(), String> {
+    chat::append(&slug, &entry).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn chat_read(slug: String) -> Result<Vec<serde_json::Value>, String> {
+    chat::read_all(&slug).map_err(|e| e.to_string())
 }
 
 /// Streaming chat. Emits one event per chunk on the `ai-chat-chunk-<slug>`

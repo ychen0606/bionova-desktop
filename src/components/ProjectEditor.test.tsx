@@ -70,6 +70,14 @@ vi.mock("./VariablePanel", () => ({
   VariablePanel: () => <div data-testid="variable-panel-mock">vars</div>,
 }));
 
+vi.mock("./AIChat", () => ({
+  AIChat: () => <div data-testid="ai-chat-mock">chat</div>,
+}));
+
+vi.mock("./AutopilotPanel", () => ({
+  AutopilotPanel: () => <div data-testid="autopilot-mock">autopilot</div>,
+}));
+
 describe("ProjectEditor", () => {
   it("loads and shows canvas", async () => {
     render(<ProjectEditor slug="p" projectName="P" onBack={() => {}} />);

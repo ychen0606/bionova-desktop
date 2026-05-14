@@ -2,8 +2,11 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { v4 as uuid } from "uuid";
 import {
   ipc,
+  ipcAI,
+  ipcData,
   ipcKernel,
   ipcProject,
+  CardSpec,
   ExecutionResult,
   NotebookJson,
   OpEntry,
@@ -20,6 +23,8 @@ import { PipelineCanvas } from "./PipelineCanvas";
 import { UndoRedoBar } from "./UndoRedoBar";
 import { DataPanel } from "./DataPanel";
 import { VariablePanel } from "./VariablePanel";
+import { AIChat } from "./AIChat";
+import { AutopilotPanel } from "./AutopilotPanel";
 import { StepState } from "./Step";
 
 /// Translate a kernel ExecutionResult into the array of nbformat output dicts
@@ -264,6 +269,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     const src = Array.isArray(nb.cells[idx].source)
       ? (nb.cells[idx].source as string[]).join("")
       : (nb.cells[idx].source as string);
+    const cardId = nb.cells[idx].metadata.bionova?.card_id ?? "";
     setCellStates((s) => ({ ...s, [cell_id]: "running" }));
     try {
       const cfg = await ipc.getConfig();
@@ -279,6 +285,15 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         [cell_id]: out.error ? "error" : "done",
       }));
       setVarsRefreshKey((k) => k + 1);
+
+      // Autopilot Fix Loop: if this cell belongs to an AI-generated card and
+      // the run errored, ask AI for a corrected version up to 5 rounds.
+      if (out.error) {
+        const card = nb.metadata.bionova.cards.find((c) => c.id === cardId);
+        if (card?.ai_generated) {
+          await tryAutoFix(cell_id, src, out.error, cfg.python_env.python_path, cardId);
+        }
+      }
     } catch (e: any) {
       const next: NotebookJson = JSON.parse(JSON.stringify(nb));
       next.cells[idx].outputs = [
@@ -292,6 +307,118 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
       setNb(next);
       debounceSave(next);
       setCellStates((s) => ({ ...s, [cell_id]: "error" }));
+    }
+  };
+
+  // Up to 5 attempts: ask AI for a fix, replace cell source, re-run.
+  const tryAutoFix = async (
+    cell_id: string,
+    originalSrc: string,
+    initialError: { ename: string; evalue: string; traceback: string[] },
+    pythonPath: string,
+    card_id: string
+  ) => {
+    const priorAttempts: Array<{ code: string; error: string }> = [];
+    let lastCode = originalSrc;
+    let lastErr = `${initialError.ename}: ${initialError.evalue}`;
+    for (let round = 1; round <= 5; round++) {
+      setCellStates((s) => ({ ...s, [cell_id]: "running" }));
+      const aiResp = await ipcAI.fixError({
+        card_id,
+        original_code: lastCode,
+        error_message: lastErr,
+        var_snapshot: "(see kernel)",
+        prior_attempts: priorAttempts
+          .map((a, i) => `attempt ${i + 1}: ${a.error}`)
+          .join("\n") || "(none)",
+      });
+      const fixedCode = aiResp.text.trim();
+      if (!fixedCode || fixedCode === lastCode) break;
+      // Commit cell_content_set so undo can revert.
+      const idxNow = nb.cells.findIndex((c) => getCellId(c) === cell_id);
+      if (idxNow < 0) break;
+      const oldSrc = Array.isArray(nb.cells[idxNow].source)
+        ? (nb.cells[idxNow].source as string[]).join("")
+        : (nb.cells[idxNow].source as string);
+      await commitOp({
+        op: "cell_content_set",
+        fwd: { cell_id, new_source: fixedCode },
+        rev: { cell_id, old_source: oldSrc },
+      });
+      const out = await ipcKernel.execute(slug, pythonPath, fixedCode);
+      const next: NotebookJson = JSON.parse(JSON.stringify(nb));
+      const idx2 = next.cells.findIndex((c) => getCellId(c) === cell_id);
+      if (idx2 >= 0) {
+        next.cells[idx2].outputs = executionResultToOutputs(out);
+        next.cells[idx2].execution_count = out.execution_count;
+        next.cells[idx2].source = fixedCode;
+      }
+      setNb(next);
+      debounceSave(next);
+      setVarsRefreshKey((k) => k + 1);
+      if (!out.error) {
+        setCellStates((s) => ({ ...s, [cell_id]: "done" }));
+        setLastOp(`autofix succeeded on round ${round}`);
+        return;
+      }
+      priorAttempts.push({ code: fixedCode, error: `${out.error.ename}: ${out.error.evalue}` });
+      lastCode = fixedCode;
+      lastErr = `${out.error.ename}: ${out.error.evalue}`;
+    }
+    setCellStates((s) => ({ ...s, [cell_id]: "error" }));
+    setLastOp("autofix exhausted (5 rounds)");
+  };
+
+  const applyAutopilotPlan = async (cards: CardSpec[]) => {
+    // 1) Insert one Card per plan item (op_log card_insert).
+    // 2) For each new card, ask AI for code, split on # ---NEW CELL--- and
+    //    insert each chunk as a Step via cell_insert.
+    // `nb` state in this closure is stale across commitOp awaits, so track
+    // the cell position cursor manually.
+    let cardCursor = nb.metadata.bionova.cards.length;
+    let cellCursor = nb.cells.length;
+    const prevSummaries: string[] = [];
+    for (const spec of cards) {
+      const cardMeta: CardMeta = {
+        id: uuid(),
+        title: spec.title,
+        order: cardCursor++,
+        collapsed: false,
+        ai_generated: true,
+      };
+      await commitOp({
+        op: "card_insert",
+        fwd: { card: cardMeta },
+        rev: { card_id: cardMeta.id },
+      });
+      const codeResp = await ipcAI.generateCode(
+        {
+          card_id: spec.id,
+          card_title: spec.title,
+          prev_summaries: prevSummaries.join("; ") || "(none)",
+          adata_state: "(see prior cards)",
+          scanpy_version: "1.x",
+        },
+        4096
+      );
+      const chunks = codeResp.text.split(/^# *---NEW CELL---\s*$/m);
+      for (const code of chunks) {
+        const trimmed = code.trim();
+        if (!trimmed) continue;
+        const cell = newCell(cardMeta.id, trimmed);
+        const cellId = getCellId(cell);
+        await commitOp({
+          op: "cell_insert",
+          fwd: {
+            cell_id: cellId,
+            position: cellCursor++,
+            card_id: cardMeta.id,
+            source: trimmed,
+          },
+          rev: { cell_id: cellId },
+        });
+      }
+      prevSummaries.push(`${spec.id}: ${spec.title}`);
     }
   };
 
@@ -319,7 +446,57 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         onRestartKernel={restartKernel}
       />
       <DataPanel slug={slug} />
+      {nb.cells.length === 0 && (
+        <AutopilotPanel
+          fetchAnnDataVars={async () => {
+            const files = await ipcData.list(slug);
+            const h5ad = files.find((f) => f.kind_hint === "h5ad");
+            if (h5ad) {
+              const r = await ipcData.inspect(slug, h5ad.name);
+              const rep: any = r.report;
+              return {
+                n_obs: String(rep.n_cells ?? "?"),
+                n_vars: String(rep.n_genes ?? "?"),
+                obs_columns: (rep.obs_columns ?? []).join(", "),
+                var_columns: (rep.var_columns ?? []).join(", "),
+                layers: (rep.layers ?? []).join(", "),
+                source_hint: `h5ad: ${h5ad.name}`,
+                user_intent: "",
+              };
+            }
+            // No h5ad — describe what is there.
+            return {
+              n_obs: "?",
+              n_vars: "?",
+              obs_columns: "",
+              var_columns: "",
+              layers: "",
+              source_hint: files.map((f) => `${f.kind_hint}:${f.name}`).join(", ") || "(empty)",
+              user_intent: "",
+            };
+          }}
+          onPlanAccepted={async (cards) => {
+            await applyAutopilotPlan(cards);
+          }}
+        />
+      )}
       <VariablePanel slug={slug} refreshKey={varsRefreshKey} />
+      <AIChat
+        slug={slug}
+        projectName={projectName}
+        notebook={nb}
+        focusedCellId={null}
+        varsRefreshKey={varsRefreshKey}
+        fetchVarSnapshot={async () => {
+          const vars = await ipcKernel.inspectVars(slug);
+          if (vars.length === 0) return "(empty)";
+          return vars
+            .slice(0, 8)
+            .map((v) => `${v.name}:${v.type_name}${v.shape ? `[${v.shape.join("×")}]` : ""}`)
+            .join(", ");
+        }}
+        onApplyPatch={(cell_id, new_source) => setCellSrc(cell_id, new_source)}
+      />
       <PipelineCanvas
         notebook={nb}
         cellStates={cellStates}

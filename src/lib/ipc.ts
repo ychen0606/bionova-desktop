@@ -212,6 +212,19 @@ export type ChatChunk =
 
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
+export interface ChatHistoryEntry {
+  role: "user" | "assistant" | "system";
+  content: string;
+  ts: string;
+  usage?: AIUsageStats;
+}
+
+export const ipcChat = {
+  append: (slug: string, entry: ChatHistoryEntry) =>
+    invoke<void>("chat_append", { slug, entry }),
+  read: (slug: string) => invoke<ChatHistoryEntry[]>("chat_read", { slug }),
+};
+
 export const ipcAI = {
   plan: (vars: Record<string, string>, maxTokens?: number) =>
     invoke<CardSpec[]>("ai_plan", { vars, maxTokens: maxTokens ?? null }),

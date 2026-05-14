@@ -2,6 +2,7 @@ pub mod commands;
 pub mod config;
 pub mod data_inspector;
 pub mod ai_engine;
+pub mod chat;
 pub mod kernel;
 pub mod keychain;
 pub mod notebook;
@@ -43,6 +44,8 @@ pub fn run() {
             commands::ai_fix_error,
             commands::ai_interpret,
             commands::ai_chat_stream,
+            commands::chat_append,
+            commands::chat_read,
             commands::project_list,
             commands::project_create,
             commands::project_open,
