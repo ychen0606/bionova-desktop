@@ -143,6 +143,14 @@ export interface KernelStatus {
   running: boolean;
 }
 
+export interface VarInfo {
+  name: string;
+  type_name: string;
+  shape: number[] | null;
+  dtype: string | null;
+  repr_short: string;
+}
+
 export const ipcKernel = {
   execute: (slug: string, pythonPath: string, code: string, timeoutSecs?: number) =>
     invoke<ExecutionResult>("cell_execute", {
@@ -155,6 +163,7 @@ export const ipcKernel = {
     invoke<void>("kernel_restart", { slug, pythonPath }),
   shutdown: (slug: string) => invoke<void>("kernel_shutdown", { slug }),
   status: (slug: string) => invoke<KernelStatus>("kernel_status", { slug }),
+  inspectVars: (slug: string) => invoke<VarInfo[]>("kernel_inspect_vars", { slug }),
 };
 
 export interface DataFile {

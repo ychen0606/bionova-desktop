@@ -45,3 +45,13 @@ pub struct ExecutionError {
     pub evalue: String,
     pub traceback: Vec<String>,
 }
+
+/// One row of the variable inspector: a user-defined name in the kernel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VarInfo {
+    pub name: String,
+    pub type_name: String,
+    pub shape: Option<Vec<i64>>,
+    pub dtype: Option<String>,
+    pub repr_short: String,
+}

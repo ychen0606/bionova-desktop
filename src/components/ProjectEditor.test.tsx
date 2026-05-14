@@ -16,6 +16,7 @@ vi.mock("../lib/ipc", () => ({
     restart: vi.fn(async () => {}),
     shutdown: vi.fn(async () => {}),
     status: vi.fn(async () => ({ running: false })),
+    inspectVars: vi.fn(async () => []),
   },
   ipcData: {
     list: vi.fn(async () => []),
@@ -63,6 +64,10 @@ vi.mock("./PipelineCanvas", () => ({
 
 vi.mock("./DataPanel", () => ({
   DataPanel: () => <div data-testid="data-panel-mock">data-panel</div>,
+}));
+
+vi.mock("./VariablePanel", () => ({
+  VariablePanel: () => <div data-testid="variable-panel-mock">vars</div>,
 }));
 
 describe("ProjectEditor", () => {

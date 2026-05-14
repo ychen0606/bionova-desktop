@@ -19,6 +19,7 @@ import {
 import { PipelineCanvas } from "./PipelineCanvas";
 import { UndoRedoBar } from "./UndoRedoBar";
 import { DataPanel } from "./DataPanel";
+import { VariablePanel } from "./VariablePanel";
 import { StepState } from "./Step";
 
 /// Translate a kernel ExecutionResult into the array of nbformat output dicts
@@ -65,6 +66,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
   const [head, setHead] = useState<number>(0);
   const [cellStates, setCellStates] = useState<Record<string, StepState>>({});
   const [lastOp, setLastOp] = useState<string>("");
+  const [varsRefreshKey, setVarsRefreshKey] = useState(0);
   const saveTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -276,6 +278,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         ...s,
         [cell_id]: out.error ? "error" : "done",
       }));
+      setVarsRefreshKey((k) => k + 1);
     } catch (e: any) {
       const next: NotebookJson = JSON.parse(JSON.stringify(nb));
       next.cells[idx].outputs = [
@@ -297,6 +300,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
     if (!cfg.python_env) return;
     await ipcKernel.restart(slug, cfg.python_env.python_path);
     setLastOp("kernel restart");
+    setVarsRefreshKey((k) => k + 1);
   };
 
   const canUndo = head > 0;
@@ -315,6 +319,7 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         onRestartKernel={restartKernel}
       />
       <DataPanel slug={slug} />
+      <VariablePanel slug={slug} refreshKey={varsRefreshKey} />
       <PipelineCanvas
         notebook={nb}
         cellStates={cellStates}

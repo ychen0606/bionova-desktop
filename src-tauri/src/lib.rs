@@ -35,6 +35,7 @@ pub fn run() {
             commands::kernel_restart,
             commands::kernel_shutdown,
             commands::kernel_status,
+            commands::kernel_inspect_vars,
             commands::project_list,
             commands::project_create,
             commands::project_open,

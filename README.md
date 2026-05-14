@@ -1,6 +1,6 @@
 # BioNova Desktop
 
-AI-driven scRNA-seq IDE for Windows. **Plan 2.5 of 5 — Data Folder + Inspector + UI Rename.**
+AI-driven scRNA-seq IDE for Windows. **Plan 2.5.1 of 5 — Persistent Kernel + Polish.**
 
 > Terminology note: BioNova "Step" = one Jupyter-style code block. The biological
 > cells in scRNA-seq live inside the `adata` AnnData object loaded by your steps,
@@ -46,7 +46,26 @@ The installer lands at
 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/BioNova_0.1.0_x64_en-US.msi`.
 Double-click to install. The app appears in the Start menu as "BioNova".
 
-## What works in this build (v0.2.0-plan2)
+## What works in this build (v0.3.0-plan2.5.1)
+
+**New in Plan 2.5.1:**
+- **Persistent project kernel** — one ipykernel per project for the editor
+  session; variables defined in one Step survive into later Steps
+  (`adata = sc.read(...)` → next Step can use `adata`).
+  Restart wipes state on demand.
+- **Variable inspector** panel listing user globals (name / type / shape /
+  dtype / repr), auto-refreshes after every Run.
+- **Drag-and-drop reorder** for cards and Steps within a card (HTML5
+  native, undo/redo-aware).
+- **Batch Inspect** in the Data panel — scan every file in one click,
+  serial to keep memory bounded.
+- **File grouping** by kind (AnnData / 10x HDF5 / MatrixMarket / CSV / TSV …).
+- **CSV preview** (first 5 rows) and **h5ad obs head** (first 5 obs rows)
+  inline in the inspect report.
+
+**Plan 2.5:**
+- `~/BioNova/projects/<slug>/data/` folder per project + Inspector
+- UI rename: "Cell" → "Step" to avoid collision with biological scRNA cells
 
 **New in Plan 2:**
 - Real project CRUD with on-disk `~/BioNova/projects/<slug>/` layout
@@ -72,8 +91,6 @@ Double-click to install. The app appears in the Start menu as "BioNova".
 - AI engine integration (plan / generate / fix / interpret prompts) (Plan 3)
 - HPC execution via SSH + Slurm (Plan 4)
 - AI Output Regression Suite, signed MSI release (Plan 5)
-- Variable inspector panel (Plan 5)
-- Drag-to-reorder cards/cells (Plan 3)
 - Op log compaction (Plan 5)
 
 See `docs/superpowers/specs/2026-05-13-bionova-desktop-design.md` (in the

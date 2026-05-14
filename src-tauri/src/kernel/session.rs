@@ -6,11 +6,45 @@
 //! one and (optionally) spawn a fresh one.
 
 use super::local::LocalKernel;
-use super::ExecutionResult;
-use anyhow::Result;
+use super::{ExecutionResult, VarInfo};
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
+
+/// Python snippet that prints a single JSON line listing user-defined
+/// globals (filtering imports, dunders, modules, our own helpers). Run via
+/// `execute_and_collect`; we then parse the marker line out of stdout.
+const INSPECT_VARS_SNIPPET: &str = r#"
+def _bionova_inspect_vars():
+    import json, types
+    _skip_types = (types.ModuleType, types.FunctionType, types.BuiltinFunctionType, type)
+    out = []
+    for _k, _v in list(globals().items()):
+        if _k.startswith("_"): continue
+        if _k in ("In", "Out", "exit", "quit", "get_ipython"): continue
+        if isinstance(_v, _skip_types): continue
+        info = {"name": _k, "type_name": type(_v).__name__}
+        try:
+            shp = getattr(_v, "shape", None)
+            if shp is not None:
+                info["shape"] = [int(s) for s in shp] if hasattr(shp, "__iter__") else [int(shp)]
+        except Exception:
+            pass
+        try:
+            dt = getattr(_v, "dtype", None)
+            if dt is not None: info["dtype"] = str(dt)
+        except Exception:
+            pass
+        try:
+            r = repr(_v)
+            info["repr_short"] = r if len(r) < 160 else r[:157] + "..."
+        except Exception:
+            info["repr_short"] = "<unrepr>"
+        out.append(info)
+    print("___BIONOVA_VARS___" + json.dumps(out) + "___END___")
+_bionova_inspect_vars()
+"#;
 
 #[derive(Default)]
 pub struct SessionManager {
@@ -59,6 +93,28 @@ impl SessionManager {
         self.inner.lock().unwrap().insert(slug.to_string(), k);
         Ok(())
     }
+
+    /// List user-defined variables currently in the kernel. Returns empty list
+    /// if the kernel isn't running yet (no cells executed).
+    pub fn inspect_vars(&self, slug: &str) -> Result<Vec<VarInfo>> {
+        let mut map = self.inner.lock().unwrap();
+        let Some(k) = map.get_mut(slug) else { return Ok(vec![]) };
+        let out = k.execute_and_collect(INSPECT_VARS_SNIPPET, Duration::from_secs(15))?;
+        if let Some(err) = out.error {
+            return Err(anyhow!("inspect failed: {}: {}", err.ename, err.evalue));
+        }
+        parse_vars_line(&out.stdout)
+    }
+}
+
+fn parse_vars_line(stdout: &str) -> Result<Vec<VarInfo>> {
+    for line in stdout.lines() {
+        if let Some(rest) = line.strip_prefix("___BIONOVA_VARS___") {
+            let json_part = rest.trim_end_matches("___END___");
+            return Ok(serde_json::from_str(json_part).unwrap_or_default());
+        }
+    }
+    Ok(vec![])
 }
 
 impl Drop for SessionManager {
@@ -87,6 +143,27 @@ mod tests {
     fn is_running_false_initially() {
         let mgr = SessionManager::new();
         assert!(!mgr.is_running("p1"));
+    }
+
+    #[test]
+    fn inspect_vars_empty_when_no_kernel() {
+        let mgr = SessionManager::new();
+        let v = mgr.inspect_vars("nope").unwrap();
+        assert!(v.is_empty());
+    }
+
+    #[test]
+    fn parse_vars_line_handles_marker_line() {
+        let stdout = "noise\n___BIONOVA_VARS___[{\"name\":\"x\",\"type_name\":\"int\",\"repr_short\":\"42\"}]___END___\nmore noise\n";
+        let v = parse_vars_line(stdout).unwrap();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].name, "x");
+    }
+
+    #[test]
+    fn parse_vars_line_empty_when_no_marker() {
+        let v = parse_vars_line("just regular output\n").unwrap();
+        assert!(v.is_empty());
     }
 
     /// E2E: two execute() calls share state.

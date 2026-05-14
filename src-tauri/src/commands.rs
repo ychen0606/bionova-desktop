@@ -1,5 +1,5 @@
 use crate::config::{self, AppConfig};
-use crate::kernel::{session::SessionManager, ExecutionResult};
+use crate::kernel::{session::SessionManager, ExecutionResult, VarInfo};
 use crate::keychain;
 use crate::op_log;
 use crate::project::{self, OpenedProject, ProjectSummary};
@@ -121,6 +121,14 @@ pub async fn kernel_status(
     Ok(KernelStatus {
         running: mgr.is_running(&slug),
     })
+}
+
+#[tauri::command]
+pub async fn kernel_inspect_vars(
+    mgr: tauri::State<'_, SessionManager>,
+    slug: String,
+) -> Result<Vec<VarInfo>, String> {
+    mgr.inspect_vars(&slug).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
