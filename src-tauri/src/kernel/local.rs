@@ -48,7 +48,10 @@ pub struct LocalKernel {
 
 impl LocalKernel {
     /// Spawn a fresh ipykernel using the given python interpreter.
-    pub fn spawn(python_path: &str) -> Result<Self> {
+    /// `cwd` becomes the child process's working directory — important
+    /// because scanpy writes plots to `./figures/` relative to it, and the
+    /// app's install dir is read-only on Windows.
+    pub fn spawn(python_path: &str, cwd: Option<&std::path::Path>) -> Result<Self> {
         let key: String = (0..32)
             .map(|_| rand::thread_rng().gen_range(b'a'..=b'z') as char)
             .collect();
@@ -80,6 +83,9 @@ impl LocalKernel {
         cmd.args(["-m", "ipykernel_launcher", "-f", tmp.to_str().unwrap()])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if let Some(d) = cwd {
+            cmd.current_dir(d);
+        }
         hide_window(&mut cmd);
         let child = cmd.spawn().context("spawn ipykernel")?;
 
@@ -363,7 +369,7 @@ mod tests {
             eprintln!("skip: set BIONOVA_E2E_PYTHON to a python with ipykernel installed");
             return;
         };
-        let mut k = LocalKernel::spawn(&py).unwrap();
+        let mut k = LocalKernel::spawn(&py, None).unwrap();
         let out = k.execute_and_collect("print('hello from bionova')", Duration::from_secs(30)).unwrap();
         assert!(out.stdout.contains("hello from bionova"), "stdout was: {:?}", out.stdout);
         assert!(out.error.is_none());
@@ -377,7 +383,7 @@ mod tests {
             eprintln!("skip: set BIONOVA_E2E_PYTHON");
             return;
         };
-        let mut k = LocalKernel::spawn(&py).unwrap();
+        let mut k = LocalKernel::spawn(&py, None).unwrap();
         let _ = k.execute_and_collect("x = 42", Duration::from_secs(30)).unwrap();
         let out2 = k.execute_and_collect("print(x * 2)", Duration::from_secs(30)).unwrap();
         assert!(out2.stdout.contains("84"), "second exec lost state; stdout: {:?}", out2.stdout);

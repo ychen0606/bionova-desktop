@@ -73,7 +73,7 @@ pub async fn run_smoke_cell(python_path: String, code: String) -> Result<String,
     use crate::kernel::local::LocalKernel;
     use std::time::Duration;
 
-    let mut k = LocalKernel::spawn(&python_path).map_err(|e| e.to_string())?;
+    let mut k = LocalKernel::spawn(&python_path, None).map_err(|e| e.to_string())?;
     let out = k
         .execute_and_collect(&code, Duration::from_secs(15))
         .map_err(|e| e.to_string())?;

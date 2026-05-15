@@ -7,10 +7,21 @@
 
 use super::local::LocalKernel;
 use super::{ExecutionResult, VarInfo};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
+
+/// Per-slug working directory for the kernel. Created on first use so scanpy
+/// plots (which save under `./figures/` by default) and any user `open(...)`
+/// land inside the project rather than the read-only install dir.
+fn project_cwd(slug: &str) -> Result<PathBuf> {
+    let home = dirs::home_dir().context("home_dir")?;
+    let p = home.join("BioNova").join("projects").join(slug);
+    std::fs::create_dir_all(&p)?;
+    Ok(p)
+}
 
 /// Python snippet that prints a single JSON line listing user-defined
 /// globals (filtering imports, dunders, modules, our own helpers). Run via
@@ -67,7 +78,8 @@ impl SessionManager {
     ) -> Result<ExecutionResult> {
         let mut map = self.inner.lock().unwrap();
         if !map.contains_key(slug) {
-            let k = LocalKernel::spawn(python_path)?;
+            let cwd = project_cwd(slug)?;
+            let k = LocalKernel::spawn(python_path, Some(&cwd))?;
             map.insert(slug.to_string(), k);
         }
         let k = map.get_mut(slug).expect("inserted above");
@@ -89,7 +101,8 @@ impl SessionManager {
     /// Kill the old kernel for `slug` and spawn a fresh one.
     pub fn restart(&self, slug: &str, python_path: &str) -> Result<()> {
         self.shutdown(slug);
-        let k = LocalKernel::spawn(python_path)?;
+        let cwd = project_cwd(slug)?;
+        let k = LocalKernel::spawn(python_path, Some(&cwd))?;
         self.inner.lock().unwrap().insert(slug.to_string(), k);
         Ok(())
     }
