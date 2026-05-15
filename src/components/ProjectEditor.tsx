@@ -533,9 +533,8 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         onRestartKernel={restartKernel}
       />
       <DataPanel slug={slug} />
-      {nb.cells.length === 0 && (
-        <AutopilotPanel
-          fetchAnnDataVars={async () => {
+      <AutopilotPanel
+        fetchAnnDataVars={async () => {
             const files = await ipcData.list(slug);
             const h5ad = files.find((f) => f.kind_hint === "h5ad");
             if (h5ad) {
@@ -567,11 +566,10 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
               data_file_name: "",
             };
           }}
-          onPlanAccepted={async (cards, metadata) => {
-            await applyAutopilotPlan(cards, metadata);
-          }}
-        />
-      )}
+        onPlanAccepted={async (cards, metadata) => {
+          await applyAutopilotPlan(cards, metadata);
+        }}
+      />
       <VariablePanel slug={slug} refreshKey={varsRefreshKey} />
       <AIChat
         slug={slug}
