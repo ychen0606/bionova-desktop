@@ -97,6 +97,18 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
   const [lastOp, setLastOp] = useState<string>("");
   const [varsRefreshKey, setVarsRefreshKey] = useState(0);
   const saveTimer = useRef<number | null>(null);
+  // Refs that mirror notebook + log/head. Required because async loops (e.g.
+  // applyAutopilotPlan) call commitOp many times before React re-renders;
+  // without the ref, every commitOp sees the SAME initial state and each
+  // setNb overwrites the previous, leaving only the last op visible.
+  const nbRef = useRef<NotebookJson | null>(null);
+  const headRef = useRef<number>(0);
+  useEffect(() => {
+    nbRef.current = nb;
+  }, [nb]);
+  useEffect(() => {
+    headRef.current = head;
+  }, [head]);
 
   useEffect(() => {
     (async () => {
@@ -120,21 +132,25 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
 
   const commitOp = useCallback(
     async (op: Op) => {
-      if (!nb) return;
-      const next = applyForward(nb, op);
+      const current = nbRef.current;
+      if (!current) return;
+      const next = applyForward(current, op);
+      nbRef.current = next;
       setNb(next);
       const entry: OpEntry = { ...op, ts: new Date().toISOString() };
       const seq = await ipcProject.opAppend(slug, entry);
       entry.seq = seq;
+      const liveHead = headRef.current;
       setLog((prev) => {
-        const truncated = prev.filter((e) => (e.seq ?? 0) <= head);
+        const truncated = prev.filter((e) => (e.seq ?? 0) <= liveHead);
         return [...truncated, entry];
       });
+      headRef.current = seq;
       setHead(seq);
       setLastOp(op.op);
       debounceSave(next);
     },
-    [nb, slug, head, debounceSave]
+    [slug, debounceSave]
   );
 
   const undo = useCallback(async () => {
@@ -462,7 +478,17 @@ export function ProjectEditor({ slug, projectName, onBack }: Props) {
         },
         4096
       );
-      const chunks = codeResp.text.split(/^# *---NEW CELL---\s*$/m);
+      let chunks = codeResp.text.split(/^# *---NEW CELL---\s*$/m);
+      // If the model returned nothing (or only fences that fully strip to
+      // empty), still create one Step with a TODO placeholder so the user
+      // can see which card AI failed on, and surface error/raw text.
+      const allEmpty = chunks.every((c) => !c.trim());
+      if (allEmpty) {
+        const errLine = codeResp.error
+          ? `# AI error: ${codeResp.error}`
+          : `# AI returned empty code for card "${spec.title}". Click Run to inspect.`;
+        chunks = [`${errLine}\npass`];
+      }
       for (const code of chunks) {
         const trimmed = code.trim();
         if (!trimmed) continue;

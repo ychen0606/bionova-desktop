@@ -244,17 +244,37 @@ pub fn parse_plan_response(text: &str) -> Result<Vec<CardSpec>> {
         .with_context(|| format!("plan response is not a JSON array of cards. Raw: {trimmed}"))
 }
 
-/// Strip accidental fences from a code response.
+/// Strip accidental fences from a code response. Handles three shapes:
+///  - whole reply IS a fenced block (preferred — system prompt asks for this)
+///  - reply has prose around a single ```python … ``` block (extract inner)
+///  - reply has prose around a single ``` … ``` block (extract inner)
 pub fn strip_code_fences(text: &str) -> String {
     let t = text.trim();
-    let body = t
+    // Outer fence: the WHOLE reply is wrapped.
+    if let Some(rest) = t
         .strip_prefix("```python")
         .or_else(|| t.strip_prefix("```py"))
         .or_else(|| t.strip_prefix("```"))
-        .map(|s| s.trim_start_matches('\n'))
-        .map(|s| s.trim_end_matches("```").trim_end())
-        .unwrap_or(t);
-    body.to_string()
+    {
+        let body = rest.trim_start_matches('\n').trim_end_matches("```").trim_end();
+        return body.to_string();
+    }
+    // Inner ```python … ``` block somewhere in the prose.
+    if let Some(start) = t.find("```python") {
+        let after = &t[start + "```python".len()..];
+        let body = after.trim_start_matches('\n');
+        if let Some(end) = body.find("```") {
+            return body[..end].trim_end().to_string();
+        }
+    }
+    // Generic ``` … ``` block.
+    if let Some(start) = t.find("```\n") {
+        let after = &t[start + 4..];
+        if let Some(end) = after.find("```") {
+            return after[..end].trim_end().to_string();
+        }
+    }
+    t.to_string()
 }
 
 #[cfg(test)]
@@ -280,6 +300,21 @@ mod tests {
     fn strip_code_fences_handles_python_block() {
         assert_eq!(strip_code_fences("```python\nimport scanpy as sc\n```"), "import scanpy as sc");
         assert_eq!(strip_code_fences("plain code\n"), "plain code");
+    }
+
+    #[test]
+    fn strip_code_fences_extracts_inner_block_with_prose() {
+        let resp = "Here is the QC code:\n\n```python\nsc.pp.calculate_qc_metrics(adata)\n```\n\nLet me know if you need changes.";
+        assert_eq!(
+            strip_code_fences(resp),
+            "sc.pp.calculate_qc_metrics(adata)"
+        );
+    }
+
+    #[test]
+    fn strip_code_fences_extracts_generic_block() {
+        let resp = "some intro\n```\nadata.var.head()\n```\nepilogue";
+        assert_eq!(strip_code_fences(resp), "adata.var.head()");
     }
 
     #[test]
